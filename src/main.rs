@@ -24,13 +24,14 @@ async fn get(day: u8, month: u8) -> Result<NamedFile, String> {
     // If the server returns a 200 status code
     if response.status() == 200 {
         // Create a new file
-        let mut file = rocket::tokio::fs::File::create("zastepstwa.pdf").await.unwrap();
+        let filename = format!("./cached/{}.pdf", current_date);
+        let mut file = rocket::tokio::fs::File::create(&filename).await.unwrap();
         // Download the PDF
         let filebytes = response.bytes().await.unwrap();
         // Write the PDF to the file
         file.write_all(&filebytes).await.unwrap();
         // Return the file
-        Ok(NamedFile::open("zastepstwa.pdf").await.unwrap())
+        Ok(NamedFile::open(&filename).await.unwrap())
 
     } else {
         // Return an error

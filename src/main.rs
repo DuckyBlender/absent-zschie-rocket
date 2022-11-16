@@ -16,24 +16,38 @@ async fn get_data(day: u8, month: u8) -> Result<NamedFile, String> {
     let current_year = chrono::Local::now().year();
 
     let formatted_date = format!("{}.{}.{}", day, month, current_year);
-    let response = reqwest::get(format!(
+    let response = match reqwest::get(format!(
         "https://zastepstwa.zschie.pl/pliki/{}.pdf",
         formatted_date
     ))
-    .await
-    .unwrap();
+    .await {
+        Ok(response) => response,
+        Err(err) => return Err(format!("Error while fetching data: {}", err)),
+    };
 
     // If the server returns a 200 status code
     if response.status() == 200 {
         // Create a new file
         let filename = format!("./cached/{}.pdf", formatted_date);
-        let mut file = rocket::tokio::fs::File::create(&filename).await.unwrap();
+        let mut file = match rocket::tokio::fs::File::create(&filename).await {
+            Ok(file) => file,
+            Err(err) => return Err(format!("Error while creating file: {}", err)),
+        };
         // Download the PDF
-        let filebytes = response.bytes().await.unwrap();
+        let filebytes = match response.bytes().await {
+            Ok(filebytes) => filebytes,
+            Err(err) => return Err(format!("Error while converting file: {}", err)),
+        };
         // Write the PDF to the file
-        file.write_all(&filebytes).await.unwrap();
+        match file.write_all(&filebytes).await {
+            Ok(file) => file,
+            Err(err) => return Err(format!("Error while writing file: {}", err)),
+        };
         // Return the file
-        Ok(NamedFile::open(&filename).await.unwrap())
+        match NamedFile::open(&filename).await {
+            Ok(file) => Ok(file),
+            Err(err) => Err(format!("Error while opening file: {}", err)),
+        }
 
     } else {
         // Return an error
@@ -50,24 +64,38 @@ async fn auto_get_data() -> Result<NamedFile, String> {
     let current_date = current_date.format("%d.%m.%Y").to_string();
     // Send a get request to the server
 
-    let response = reqwest::get(format!(
+    let response = match reqwest::get(format!(
         "https://zastepstwa.zschie.pl/pliki/{}.pdf",
         current_date
     ))
-    .await
-    .unwrap();
+    .await {
+        Ok(response) => response,
+        Err(err) => return Err(format!("Error while fetching data: {}", err)),
+    };
 
     // If the server returns a 200 status code
     if response.status() == 200 {
         // Create a new file
         let filename = format!("./cached/{}.pdf", current_date);
-        let mut file = rocket::tokio::fs::File::create(&filename).await.unwrap();
+        let mut file = match rocket::tokio::fs::File::create(&filename).await {
+            Ok(file) => file,
+            Err(err) => return Err(format!("Error while creating file: {}", err)),
+        };
         // Download the PDF
-        let filebytes = response.bytes().await.unwrap();
+        let filebytes = match response.bytes().await {
+            Ok(filebytes) => filebytes,
+            Err(err) => return Err(format!("Error while converting file: {}", err)),
+        };
         // Write the PDF to the file
-        file.write_all(&filebytes).await.unwrap();
+        match file.write_all(&filebytes).await {
+            Ok(file) => file,
+            Err(err) => return Err(format!("Error while writing file: {}", err)),
+        };
         // Return the file
-        Ok(NamedFile::open(&filename).await.unwrap())
+        match NamedFile::open(&filename).await {
+            Ok(file) => Ok(file),
+            Err(err) => Err(format!("Error while opening file: {}", err)),
+        }
 
     } else {
         // Return an error
@@ -78,7 +106,7 @@ async fn auto_get_data() -> Result<NamedFile, String> {
 
 #[get("/")]
 async fn index() -> &'static str {
-    "Hello, world!"
+    "Hello, world! Try to go to /getdata to get the current day's data"
 }
 
 #[launch]

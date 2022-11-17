@@ -3,9 +3,8 @@ extern crate rocket;
 
 use chrono::Datelike;
 // import json from rocket
-use rocket::fs::NamedFile;
+use rocket::fs::{FileServer, NamedFile};
 use rocket::tokio::io::AsyncWriteExt;
-
 
 #[get("/getdata/<day>/<month>")]
 async fn get_data(day: u8, month: u8) -> Result<NamedFile, String> {
@@ -20,7 +19,8 @@ async fn get_data(day: u8, month: u8) -> Result<NamedFile, String> {
         "https://zastepstwa.zschie.pl/pliki/{}.pdf",
         formatted_date
     ))
-    .await {
+    .await
+    {
         Ok(response) => response,
         Err(err) => return Err(format!("Error while fetching data: {}", err)),
     };
@@ -28,8 +28,8 @@ async fn get_data(day: u8, month: u8) -> Result<NamedFile, String> {
     // If the server returns a 200 status code
     if response.status() == 200 {
         // Create a new file
-        let filename = format!("./cached/{}.pdf", formatted_date);
-        let mut file = match rocket::tokio::fs::File::create(&filename).await {
+        let filename_pdf = format!("./cached/{}.pdf", formatted_date);
+        let mut file = match rocket::tokio::fs::File::create(&filename_pdf).await {
             Ok(file) => file,
             Err(err) => return Err(format!("Error while creating file: {}", err)),
         };
@@ -43,12 +43,8 @@ async fn get_data(day: u8, month: u8) -> Result<NamedFile, String> {
             Ok(file) => file,
             Err(err) => return Err(format!("Error while writing file: {}", err)),
         };
-        // Return the file
-        match NamedFile::open(&filename).await {
-            Ok(file) => Ok(file),
-            Err(err) => Err(format!("Error while opening file: {}", err)),
-        }
-
+        // Return the PDF
+        Ok(NamedFile::open(&filename_pdf).await.unwrap())
     } else {
         // Return an error
         let response_status = response.status().as_u16();
@@ -56,10 +52,30 @@ async fn get_data(day: u8, month: u8) -> Result<NamedFile, String> {
     }
 }
 
-#[get("/getdata")]
-async fn auto_get_data() -> Result<NamedFile, String> {
+#[get("/getdata/<when>")]
+async fn auto_get_data(when: String) -> Result<NamedFile, String> {
     // Get current date
-    let current_date = chrono::Local::now();
+    let current_date = if when == "tomorrow" {
+        // If it's friday or saturday return nearest monday
+        match chrono::Local::now().weekday() {
+            chrono::Weekday::Fri => chrono::Local::now() + chrono::Duration::days(3),
+            chrono::Weekday::Sat => chrono::Local::now() + chrono::Duration::days(2),
+            _ => chrono::Local::now() + chrono::Duration::days(1),
+        }
+    } else if when == "today" {
+        match chrono::Local::now().weekday() {
+            chrono::Weekday::Sat => {
+                return Err("Jest dziś sobota, nie ma dziś żadnych lekcji!".to_string())
+            }
+            chrono::Weekday::Sun => {
+                return Err("Jest dziś niedziela, nie ma dziś żadnych lekcji!".to_string())
+            }
+            _ => chrono::Local::now(),
+        }
+    } else {
+        return Err("Invalid type in request".to_string());
+    };
+
     // Format the current date to the PL format
     let current_date = current_date.format("%d.%m.%Y").to_string();
     // Send a get request to the server
@@ -68,7 +84,8 @@ async fn auto_get_data() -> Result<NamedFile, String> {
         "https://zastepstwa.zschie.pl/pliki/{}.pdf",
         current_date
     ))
-    .await {
+    .await
+    {
         Ok(response) => response,
         Err(err) => return Err(format!("Error while fetching data: {}", err)),
     };
@@ -76,8 +93,8 @@ async fn auto_get_data() -> Result<NamedFile, String> {
     // If the server returns a 200 status code
     if response.status() == 200 {
         // Create a new file
-        let filename = format!("./cached/{}.pdf", current_date);
-        let mut file = match rocket::tokio::fs::File::create(&filename).await {
+        let filename_pdf = format!("./cached/{}.pdf", current_date);
+        let mut file = match rocket::tokio::fs::File::create(&filename_pdf).await {
             Ok(file) => file,
             Err(err) => return Err(format!("Error while creating file: {}", err)),
         };
@@ -92,11 +109,10 @@ async fn auto_get_data() -> Result<NamedFile, String> {
             Err(err) => return Err(format!("Error while writing file: {}", err)),
         };
         // Return the file
-        match NamedFile::open(&filename).await {
+        match NamedFile::open(&filename_pdf).await {
             Ok(file) => Ok(file),
             Err(err) => Err(format!("Error while opening file: {}", err)),
         }
-
     } else {
         // Return an error
         let response_status = response.status().as_u16();
@@ -104,12 +120,23 @@ async fn auto_get_data() -> Result<NamedFile, String> {
     }
 }
 
-#[get("/")]
-async fn index() -> &'static str {
-    "Hello, world! Try to go to /getdata to get the current day's data"
-}
-
 #[launch]
 fn launch() -> _ {
-    rocket::build().mount("/", routes![index, get_data, auto_get_data])
+    // Check if the static folder exists
+    if !std::path::Path::new("./static").exists() {
+        // If it doesn't, create it
+        println!("\nWARNING: Static folder doesn't exist, creating it. You won't have any UI. Just the API!\n");
+        std::fs::create_dir("./static").unwrap();
+    }
+
+    // Check if the cached folder exists
+    if !std::path::Path::new("./cached").exists() {
+        // If it doesn't, create it
+        std::fs::create_dir("./cached").unwrap();
+    }
+
+    // Start the server
+    rocket::build()
+        .mount("/api/", routes![get_data, auto_get_data])
+        .mount("/", FileServer::from("static"))
 }

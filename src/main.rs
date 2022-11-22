@@ -6,7 +6,7 @@ use chrono::Datelike;
 use rocket::fs::{FileServer, NamedFile};
 use rocket::tokio::io::AsyncWriteExt;
 
-#[get("/getdata/<day>/<month>")]
+#[get("/?<day>&<month>")]
 async fn get_data(day: u8, month: u8) -> Result<NamedFile, String> {
     if day > 31 || month > 12 {
         return Err("Invalid date".to_string());
@@ -52,7 +52,7 @@ async fn get_data(day: u8, month: u8) -> Result<NamedFile, String> {
     }
 }
 
-#[get("/getdata/<when>")]
+#[get("/?<when>")]
 async fn auto_get_data(when: String) -> Result<NamedFile, String> {
     // Get current date
     let current_date = if when == "tomorrow" {
@@ -137,6 +137,7 @@ fn launch() -> _ {
 
     // Start the server
     rocket::build()
-        .mount("/api/", routes![get_data, auto_get_data])
+        .mount("/api/data", routes![get_data])
+        .mount("/api/data/auto", routes![auto_get_data])
         .mount("/", FileServer::from("static"))
 }

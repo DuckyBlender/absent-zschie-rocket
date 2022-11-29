@@ -116,6 +116,9 @@ async fn auto_get_data(when: String) -> Result<NamedFile, String> {
             Ok(file) => Ok(file),
             Err(err) => Err(format!("Error while opening file: {}", err)),
         }
+    } else if response.status() == 404 {
+        // If the server returns a 404 status code
+        Err(format!("Nie ma obecnie zastępstw na dzień {}! Spróbuj ponownie później", current_date))
     } else {
         // Return an error
         let response_status = response.status().as_u16();

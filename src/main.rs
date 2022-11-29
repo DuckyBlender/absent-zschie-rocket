@@ -45,6 +45,9 @@ async fn get_data(day: u8, month: u8) -> Result<NamedFile, String> {
         };
         // Return the PDF
         Ok(NamedFile::open(&filename_pdf).await.unwrap())
+    } else if response.status() == 404 {
+        // If the server returns a 404 status code
+        Err(format!("Nie ma obecnie zastępstw na dzień {}! Spróbuj ponownie później", formatted_date))
     } else {
         // Return an error
         let response_status = response.status().as_u16();

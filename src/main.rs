@@ -14,11 +14,28 @@ async fn get_data(day: u8, month: u8) -> Result<NamedFile, String> {
     // Make the day have 2 digits
     let day = format!("{:02}", day);
     let current_year = chrono::Local::now().year();
+    let date = format!("{}.{}.{}", day, month, current_year);
 
-    let formatted_date = format!("{}.{}.{}", day, month, current_year);
+    // Check if the file is in the cache
+    let filename_pdf = format!("./cached/{}.pdf", date);
+    if std::path::Path::new(&filename_pdf).exists() {
+        // Check if the file is younger then 10 minutes
+        let metadata = std::fs::metadata(&filename_pdf).unwrap();
+        let file_age = chrono::Local::now() - chrono::DateTime::from(metadata.modified().unwrap());
+        if file_age.num_minutes() < 10 {
+            // Return the file
+            return Ok(NamedFile::open(&filename_pdf).await.unwrap());
+        }
+        else {
+            // Delete the file
+            std::fs::remove_file(&filename_pdf).unwrap();
+            // And continue as normal
+        }
+    }
+
     let response = match reqwest::get(format!(
         "https://zastepstwa.zschie.pl/pliki/{}.pdf",
-        formatted_date
+        date
     ))
     .await
     {
@@ -28,8 +45,9 @@ async fn get_data(day: u8, month: u8) -> Result<NamedFile, String> {
 
     // If the server returns a 200 status code
     if response.status() == 200 {
+        
         // Create a new file
-        let filename_pdf = format!("./cached/{}.pdf", formatted_date);
+        let filename_pdf = format!("./cached/{}.pdf", date);
         let mut file = match rocket::tokio::fs::File::create(&filename_pdf).await {
             Ok(file) => file,
             Err(err) => return Err(format!("Error while creating file: {}", err)),
@@ -50,7 +68,7 @@ async fn get_data(day: u8, month: u8) -> Result<NamedFile, String> {
         // If the server returns a 404 status code
         Err(format!(
             "Nie ma obecnie zastępstw na dzień {}! Spróbuj ponownie później!",
-            formatted_date
+            date
         ))
     } else {
         // Return an error
@@ -84,12 +102,29 @@ async fn auto_get_data(when: String) -> Result<NamedFile, String> {
     };
 
     // Format the current date to the PL format
-    let current_date = current_date.format("%d.%m.%Y").to_string();
+    let date = current_date.format("%d.%m.%Y").to_string();
     // Send a get request to the server
 
+    // Check if the file is in the cache
+    let filename_pdf = format!("./cached/{}.pdf", date);
+    if std::path::Path::new(&filename_pdf).exists() {
+        // Check if the file is younger then 10 minutes
+        let metadata = std::fs::metadata(&filename_pdf).unwrap();
+        let file_age = chrono::Local::now() - chrono::DateTime::from(metadata.modified().unwrap());
+        if file_age.num_minutes() < 10 {
+            // Return the file
+            println!("Returning cached file: {}", filename_pdf);
+            return Ok(NamedFile::open(&filename_pdf).await.unwrap());
+        }
+        else {
+            // Delete the file
+            std::fs::remove_file(&filename_pdf).unwrap();
+            // And continue as normal
+        }
+    }
     let response = match reqwest::get(format!(
         "https://zastepstwa.zschie.pl/pliki/{}.pdf",
-        current_date
+        date
     ))
     .await
     {
@@ -100,7 +135,7 @@ async fn auto_get_data(when: String) -> Result<NamedFile, String> {
     // If the server returns a 200 status code
     if response.status() == 200 {
         // Create a new file
-        let filename_pdf = format!("./cached/{}.pdf", current_date);
+        let filename_pdf = format!("./cached/{}.pdf", date);
         let mut file = match rocket::tokio::fs::File::create(&filename_pdf).await {
             Ok(file) => file,
             Err(err) => return Err(format!("Error while creating file: {}", err)),
@@ -124,7 +159,7 @@ async fn auto_get_data(when: String) -> Result<NamedFile, String> {
         // If the server returns a 404 status code
         Err(format!(
             "Nie ma obecnie zastępstw na dzień {}! Spróbuj ponownie później!",
-            current_date
+            date
         ))
     } else {
         // Return an error

@@ -3,7 +3,7 @@ extern crate rocket;
 
 use chrono::Datelike;
 // import json from rocket
-use rocket::fs::{FileServer, NamedFile};
+use rocket::fs::{NamedFile};
 use rocket::tokio::io::AsyncWriteExt;
 
 #[get("/?<day>&<month>", rank = 1)]
@@ -149,7 +149,5 @@ fn launch() -> _ {
 
     // Start the server
     rocket::build()
-        .mount("/api/", routes![get_data])
-        .mount("/api/", routes![auto_get_data])
-        .mount("/", FileServer::from("static"))
+        .mount("/", routes![get_data, auto_get_data])
 }

@@ -3,10 +3,10 @@ extern crate rocket;
 
 use chrono::Datelike;
 // import json from rocket
-use rocket::fs::{NamedFile};
+use rocket::fs::NamedFile;
 use rocket::tokio::io::AsyncWriteExt;
 
-#[get("/?<day>&<month>", rank = 1)]
+#[get("/?<day>&<month>")]
 async fn get_data(day: u8, month: u8) -> Result<NamedFile, String> {
     if day > 31 || month > 12 {
         return Err("Invalid date".to_string());
@@ -59,14 +59,14 @@ async fn get_data(day: u8, month: u8) -> Result<NamedFile, String> {
     }
 }
 
-#[get("/?<when>", rank = 2)]
+#[get("/?<when>")]
 async fn auto_get_data(when: String) -> Result<NamedFile, String> {
     // Get current date
     let current_date = if when == "tomorrow" {
-        // If it's friday or saturday return nearest monday
+        // If it's friday or saturday return message
         match chrono::Local::now().weekday() {
-            chrono::Weekday::Fri => chrono::Local::now() + chrono::Duration::days(3),
-            chrono::Weekday::Sat => chrono::Local::now() + chrono::Duration::days(2),
+            chrono::Weekday::Fri => return Err("Jest jutro sobota, nie ma zastępstw!".to_string()),
+            chrono::Weekday::Sat => return Err("Jest jutro niedziela, nie ma zastępstw!".to_string()),
             _ => chrono::Local::now() + chrono::Duration::days(1),
         }
     } else if when == "today" {
@@ -150,5 +150,6 @@ fn launch() -> _ {
 
     // Start the server
     rocket::build()
-        .mount("/", routes![get_data, auto_get_data])
+        .mount("/", routes![get_data])
+        .mount("/auto/", routes![auto_get_data])
 }

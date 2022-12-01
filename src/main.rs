@@ -11,7 +11,8 @@ async fn get_data(day: u8, month: u8) -> Result<NamedFile, String> {
     if day > 31 || month > 12 {
         return Err("Invalid date".to_string());
     }
-
+    // Make the day have 2 digits
+    let day = format!("{:02}", day);
     let current_year = chrono::Local::now().year();
 
     let formatted_date = format!("{}.{}.{}", day, month, current_year);

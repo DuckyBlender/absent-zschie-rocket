@@ -2,7 +2,6 @@
 extern crate rocket;
 
 use chrono::Datelike;
-// import json from rocket
 use rocket::fs::NamedFile;
 use rocket::tokio::io::AsyncWriteExt;
 
@@ -20,7 +19,7 @@ async fn get_data(day: u8, month: u8) -> Result<NamedFile, String> {
     let filename_pdf = format!("./cached/{}.pdf", date);
     if std::path::Path::new(&filename_pdf).exists() {
         // Check if the file is younger then 10 minutes
-        let metadata = std::fs::metadata(&filename_pdf).unwrap();
+        let metadata = rocket::tokio::fs::metadata(&filename_pdf).await.unwrap();
         let file_age = chrono::Local::now() - chrono::DateTime::from(metadata.modified().unwrap());
         if file_age.num_minutes() < 10 {
             // Return the file
@@ -109,7 +108,7 @@ async fn auto_get_data(when: String) -> Result<NamedFile, String> {
     let filename_pdf = format!("./cached/{}.pdf", date);
     if std::path::Path::new(&filename_pdf).exists() {
         // Check if the file is younger then 10 minutes
-        let metadata = std::fs::metadata(&filename_pdf).unwrap();
+        let metadata = rocket::tokio::fs::metadata(&filename_pdf).await.unwrap();
         let file_age = chrono::Local::now() - chrono::DateTime::from(metadata.modified().unwrap());
         if file_age.num_minutes() < 10 {
             // Return the file
@@ -170,15 +169,15 @@ async fn auto_get_data(when: String) -> Result<NamedFile, String> {
 // 404 handler
 #[catch(404)]
 fn not_found() -> &'static str {
-    "Nie ma takiej strony! Napisz do twórcy jeśli uważasz, że to błąd!"
+    "Nie ma takiej strony! Jeśli to błąd, napisz do twórcy."
 }
 
 #[launch]
-fn launch() -> _ {
+async fn launch() -> _ {
     // Check if the cached folder exists
     if !std::path::Path::new("./cached").exists() {
         // If it doesn't, create it
-        std::fs::create_dir("./cached").unwrap();
+        rocket::tokio::fs::create_dir("./cached").await.unwrap();
     }
 
     // Start the server

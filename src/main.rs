@@ -113,7 +113,6 @@ async fn auto_get_data(when: String) -> Result<NamedFile, String> {
         let file_age = chrono::Local::now() - chrono::DateTime::from(metadata.modified().unwrap());
         if file_age.num_minutes() < 10 {
             // Return the file
-            println!("Returning cached file: {}", filename_pdf);
             return Ok(NamedFile::open(&filename_pdf).await.unwrap());
         }
         else {
@@ -168,15 +167,14 @@ async fn auto_get_data(when: String) -> Result<NamedFile, String> {
     }
 }
 
+// 404 handler
+#[catch(404)]
+fn not_found() -> &'static str {
+    "Nie ma takiej strony! Napisz do twórcy jeśli uważasz, że to błąd!"
+}
+
 #[launch]
 fn launch() -> _ {
-    // Check if the static folder exists
-    if !std::path::Path::new("./static").exists() {
-        // If it doesn't, create it
-        println!("\nWARNING: Static folder doesn't exist, creating it. You won't have any UI. Just the API!\n");
-        std::fs::create_dir("./static").unwrap();
-    }
-
     // Check if the cached folder exists
     if !std::path::Path::new("./cached").exists() {
         // If it doesn't, create it
@@ -187,4 +185,5 @@ fn launch() -> _ {
     rocket::build()
         .mount("/", routes![get_data])
         .mount("/auto/", routes![auto_get_data])
+        .register("/", catchers![not_found])
 }

@@ -27,7 +27,7 @@ async fn get_data(day: u8, month: u8) -> Result<NamedFile, String> {
         }
         else {
             // Delete the file
-            std::fs::remove_file(&filename_pdf).unwrap();
+            rocket::tokio::fs::remove_file(&filename_pdf).await.unwrap();
             // And continue as normal
         }
     }
@@ -116,7 +116,7 @@ async fn auto_get_data(when: String) -> Result<NamedFile, String> {
         }
         else {
             // Delete the file
-            std::fs::remove_file(&filename_pdf).unwrap();
+            rocket::tokio::fs::remove_file(&filename_pdf).await.unwrap();
             // And continue as normal
         }
     }

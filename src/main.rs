@@ -19,15 +19,15 @@ async fn get_data(day: u8, month: u8) -> Result<NamedFile, String> {
     let filename_pdf = format!("./cached/{}.pdf", date);
     if std::path::Path::new(&filename_pdf).exists() {
         // Check if the file is younger then 10 minutes
-        let metadata = rocket::tokio::fs::metadata(&filename_pdf).await.unwrap();
-        let file_age = chrono::Local::now() - chrono::DateTime::from(metadata.modified().unwrap());
+        let metadata = rocket::tokio::fs::metadata(&filename_pdf).await.expect("Error while getting metadata");
+        let file_age = chrono::Local::now() - chrono::DateTime::from(metadata.modified().expect("Error while getting file modified date"));
         if file_age.num_minutes() < 10 {
             // Return the file
-            return Ok(NamedFile::open(&filename_pdf).await.unwrap());
+            return Ok(NamedFile::open(&filename_pdf).await.expect("Error while opening file"));
         }
         else {
             // Delete the file
-            rocket::tokio::fs::remove_file(&filename_pdf).await.unwrap();
+            rocket::tokio::fs::remove_file(&filename_pdf).await.expect("Error while deleting file");
             // And continue as normal
         }
     }
@@ -62,7 +62,7 @@ async fn get_data(day: u8, month: u8) -> Result<NamedFile, String> {
             Err(err) => return Err(format!("Error while writing file: {}", err)),
         };
         // Return the PDF
-        Ok(NamedFile::open(&filename_pdf).await.unwrap())
+        Ok(NamedFile::open(&filename_pdf).await.expect("Error while opening file"))
     } else if response.status() == 404 {
         // If the server returns a 404 status code
         Err(format!(
@@ -108,15 +108,15 @@ async fn auto_get_data(when: String) -> Result<NamedFile, String> {
     let filename_pdf = format!("./cached/{}.pdf", date);
     if std::path::Path::new(&filename_pdf).exists() {
         // Check if the file is younger then 10 minutes
-        let metadata = rocket::tokio::fs::metadata(&filename_pdf).await.unwrap();
-        let file_age = chrono::Local::now() - chrono::DateTime::from(metadata.modified().unwrap());
+        let metadata = rocket::tokio::fs::metadata(&filename_pdf).await.expect("Error while getting metadata");
+        let file_age = chrono::Local::now() - chrono::DateTime::from(metadata.modified().expect("Error while getting file modified date"));
         if file_age.num_minutes() < 10 {
             // Return the file
-            return Ok(NamedFile::open(&filename_pdf).await.unwrap());
+            return Ok(NamedFile::open(&filename_pdf).await.expect("Error while opening file"));
         }
         else {
             // Delete the file
-            rocket::tokio::fs::remove_file(&filename_pdf).await.unwrap();
+            rocket::tokio::fs::remove_file(&filename_pdf).await.expect("Error while deleting file");
             // And continue as normal
         }
     }
@@ -177,7 +177,7 @@ async fn launch() -> _ {
     // Check if the cached folder exists
     if !std::path::Path::new("./cached").exists() {
         // If it doesn't, create it
-        rocket::tokio::fs::create_dir("./cached").await.unwrap();
+        rocket::tokio::fs::create_dir("./cached").await.expect("Error while creating cached folder");
     }
 
     // Start the server

@@ -18,10 +18,10 @@ async fn get_data(day: u8, month: u8) -> Result<NamedFile, String> {
     // Check if the file is in the cache
     let filename_pdf = format!("./cached/{}.pdf", date);
     if std::path::Path::new(&filename_pdf).exists() {
-        // Check if the file is younger then 10 minutes
+        // Check if the file is younger then 15 minutes
         let metadata = rocket::tokio::fs::metadata(&filename_pdf).await.expect("Error while getting metadata");
         let file_age = chrono::Local::now() - chrono::DateTime::from(metadata.modified().expect("Error while getting file modified date"));
-        if file_age.num_minutes() < 10 {
+        if file_age.num_minutes() < 15 {
             // Return the file
             return Ok(NamedFile::open(&filename_pdf).await.expect("Error while opening file"));
         }
@@ -47,6 +47,18 @@ async fn get_data(day: u8, month: u8) -> Result<NamedFile, String> {
         
         // Create a new file
         let filename_pdf = format!("./cached/{}.pdf", date);
+
+        // Get the current time for the archive
+        let current_time = chrono::Local::now();
+        // Format the current time to the PL format
+        let exact_date = current_time.format("%d-%m-%Y---%H-%M-%S").to_string();
+        let archived_pdf = format!("./archive/{}.pdf", &exact_date);
+        // Save the file to the archive
+        let mut archive_file = match rocket::tokio::fs::File::create(&archived_pdf).await {
+            Ok(file) => file,
+            Err(err) => return Err(format!("Error while creating file: {}", err)),
+        };
+
         let mut file = match rocket::tokio::fs::File::create(&filename_pdf).await {
             Ok(file) => file,
             Err(err) => return Err(format!("Error while creating file: {}", err)),
@@ -61,6 +73,13 @@ async fn get_data(day: u8, month: u8) -> Result<NamedFile, String> {
             Ok(file) => file,
             Err(err) => return Err(format!("Error while writing file: {}", err)),
         };
+
+        // Write the PDF to the archive
+        match archive_file.write_all(&filebytes).await {
+            Ok(file) => file,
+            Err(err) => return Err(format!("Error while writing file: {}", err)),
+        };
+
         // Return the PDF
         Ok(NamedFile::open(&filename_pdf).await.expect("Error while opening file"))
     } else if response.status() == 404 {
@@ -107,10 +126,10 @@ async fn auto_get_data(when: String) -> Result<NamedFile, String> {
     // Check if the file is in the cache
     let filename_pdf = format!("./cached/{}.pdf", date);
     if std::path::Path::new(&filename_pdf).exists() {
-        // Check if the file is younger then 10 minutes
+        // Check if the file is younger then 15 minutes
         let metadata = rocket::tokio::fs::metadata(&filename_pdf).await.expect("Error while getting metadata");
         let file_age = chrono::Local::now() - chrono::DateTime::from(metadata.modified().expect("Error while getting file modified date"));
-        if file_age.num_minutes() < 10 {
+        if file_age.num_minutes() < 15 {
             // Return the file
             return Ok(NamedFile::open(&filename_pdf).await.expect("Error while opening file"));
         }
@@ -134,6 +153,19 @@ async fn auto_get_data(when: String) -> Result<NamedFile, String> {
     if response.status() == 200 {
         // Create a new file
         let filename_pdf = format!("./cached/{}.pdf", date);
+
+        // Get the current time for the archive
+        let current_time = chrono::Local::now();
+        // Format the current time to the PL format
+        let exact_date = current_time.format("%d-%m-%Y---%H-%M-%S").to_string();
+        let archived_pdf = format!("./archive/{}.pdf", &exact_date);
+
+        // Save the file to the archive
+        let mut archive_file = match rocket::tokio::fs::File::create(&archived_pdf).await {
+            Ok(file) => file,
+            Err(err) => return Err(format!("Error while creating file: {}", err)),
+        };
+
         let mut file = match rocket::tokio::fs::File::create(&filename_pdf).await {
             Ok(file) => file,
             Err(err) => return Err(format!("Error while creating file: {}", err)),
@@ -148,6 +180,13 @@ async fn auto_get_data(when: String) -> Result<NamedFile, String> {
             Ok(file) => file,
             Err(err) => return Err(format!("Error while writing file: {}", err)),
         };
+
+        // Write the PDF to the archive
+        match archive_file.write_all(&filebytes).await {
+            Ok(file) => file,
+            Err(err) => return Err(format!("Error while writing file: {}", err)),
+        };
+
         // Return the file
         match NamedFile::open(&filename_pdf).await {
             Ok(file) => Ok(file),
@@ -178,6 +217,11 @@ async fn launch() -> _ {
     if !std::path::Path::new("./cached").exists() {
         // If it doesn't, create it
         rocket::tokio::fs::create_dir("./cached").await.expect("Error while creating cached folder");
+    }
+    // Check if archive folder exists
+    if !std::path::Path::new("./archive").exists() {
+        // If it doesn't, create it
+        rocket::tokio::fs::create_dir("./archive").await.expect("Error while creating archive folder");
     }
 
     // Start the server

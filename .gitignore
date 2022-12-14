@@ -15,4 +15,4 @@ Cargo.lock
 
 # Downloaded PDF files
 cached/
-archive/
+log/

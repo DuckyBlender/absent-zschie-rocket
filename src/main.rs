@@ -278,9 +278,9 @@ async fn launch() -> _ {
         // And write the default config to it
         let config = r#"
         [global]
-        address = \"0.0.0.0\"
+        address = "0.0.0.0"
         port = 9000
-        log_level = \"off\"
+        log_level = "off"
         "#;
         rocket::tokio::fs::write("./Rocket.toml", config)
             .await

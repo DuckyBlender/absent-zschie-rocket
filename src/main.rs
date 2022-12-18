@@ -6,12 +6,13 @@ use rocket::fs::NamedFile;
 use rocket::tokio::io::AsyncWriteExt;
 // Static files
 use rocket::fs::FileServer;
+use rocket::response::Redirect;
 
 use log::{error, info, warn};
 
-#[get("/?<day>&<month>&<gui>")]
-async fn get_data(day: u8, month: u8, gui: bool) -> Result<NamedFile, String> {
-    info!("Incoming request for {}.{} with GUI: {}", day, month, gui);
+#[get("/?<day>&<month>")]
+async fn get_data(day: u8, month: u8) -> Result<NamedFile, String> {
+    info!("Incoming request for {}.{}", day, month);
     if day > 31 || month > 12 {
         warn!("Invalid date: {}/{}", day, month);
         return Err("Invalid date".to_string());
@@ -229,64 +230,8 @@ async fn launch() -> _ {
             .await
             .expect("Error while creating cached folder");
     }
-    // Check if the log file exists
-    if !std::path::Path::new("./log.yml").exists() {
-        // If it doesn't, create it
-        rocket::tokio::fs::File::create("./log.yml")
-            .await
-            .expect("Error while creating log file");
-        // And write the default config to it
-        // https://tms-dev-blog.com/log-to-a-file-in-rust-with-log4rs/
-        let config = r#"
-        appenders:  
-            my_stdout:
-                kind: console
-                encoder:
-                    pattern: "{h({d(%Y-%m-%d %H:%M:%S)(utc)} - {l}: {m}{n})}"
-            my_file_logger:
-                kind: rolling_file
-                path: "log/log.log"
-                encoder:
-                    pattern: "{d(%Y-%m-%d %H:%M:%S)(utc)} - {h({l})}: {m}{n}"
-                policy:
-                    trigger:
-                        kind: size
-                        limit: 50kb
-                    roller:
-                        kind: fixed_window
-                        base: 1
-                        count: 10
-                        pattern: "log/log{}.log"
-        root:
-            level: info
-            appenders:
-                - my_stdout
-                - my_file_logger"#;
-        rocket::tokio::fs::write("./log.yml", config)
-            .await
-            .expect("Error while writing to log file");
-    }
-    // Set the logger
-    log4rs::init_file("./log.yml", Default::default()).expect("Error while setting logger");
+    // Don't check for the log or config file, because they are in the Github repo
 
-    // Check if the Rocket.toml file exists
-    if !std::path::Path::new("./Rocket.toml").exists() {
-        // If it doesn't, create it
-        rocket::tokio::fs::File::create("./Rocket.toml")
-            .await
-            .expect("Error while creating Rocket.toml file");
-        // And write the default config to it
-        let config = r#"
-        [global]
-        address = "0.0.0.0"
-        port = 9000
-        log_level = "off"
-        "#;
-        rocket::tokio::fs::write("./Rocket.toml", config)
-            .await
-            .expect("Error while writing to Rocket.toml file");
-    }
-    
     // Start the server
     rocket::build()
         // Static files

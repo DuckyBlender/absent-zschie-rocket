@@ -208,14 +208,14 @@ async fn auto_get_data(when: String) -> Result<NamedFile, String> {
 }
 
 // Status page
-#[get("/status")]
-fn status() -> &'static str {
+#[get("/")]
+async fn status() -> &'static str {
     "Strona jest online!"
 }
 
 // 404 handler
 #[catch(404)]
-fn not_found() -> &'static str {
+async fn not_found() -> &'static str {
     "Nie ma takiej strony! Jeśli to błąd, napisz do twórcy."
 }
 
@@ -270,7 +270,8 @@ async fn launch() -> _ {
 
     // Start the server
     rocket::build()
-        .mount("/", routes![get_data, status])
+        .mount("/", routes![get_data])
         .mount("/auto/", routes![auto_get_data])
+        .mount("/status/", routes![status])
         .register("/", catchers![not_found])
 }

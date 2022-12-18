@@ -4,13 +4,14 @@ extern crate rocket;
 use chrono::Datelike;
 use rocket::fs::NamedFile;
 use rocket::tokio::io::AsyncWriteExt;
+// Static files
+use rocket::fs::FileServer;
 
 use log::{error, info, warn};
 
-
-#[get("/?<day>&<month>")]
-async fn get_data(day: u8, month: u8) -> Result<NamedFile, String> {
-    info!("Incoming request for {}.{}", day, month);
+#[get("/?<day>&<month>&<gui>")]
+async fn get_data(day: u8, month: u8, gui: bool) -> Result<NamedFile, String> {
+    info!("Incoming request for {}.{} with GUI: {}", day, month, gui);
     if day > 31 || month > 12 {
         warn!("Invalid date: {}/{}", day, month);
         return Err("Invalid date".to_string());
@@ -268,8 +269,28 @@ async fn launch() -> _ {
     // Set the logger
     log4rs::init_file("./log.yml", Default::default()).expect("Error while setting logger");
 
+    // Check if the Rocket.toml file exists
+    if !std::path::Path::new("./Rocket.toml").exists() {
+        // If it doesn't, create it
+        rocket::tokio::fs::File::create("./Rocket.toml")
+            .await
+            .expect("Error while creating Rocket.toml file");
+        // And write the default config to it
+        let config = r#"
+        [global]
+        address = \"0.0.0.0\"
+        port = 9000
+        log_level = \"off\"
+        "#;
+        rocket::tokio::fs::write("./Rocket.toml", config)
+            .await
+            .expect("Error while writing to Rocket.toml file");
+    }
+    
     // Start the server
     rocket::build()
+        // Static files
+        .mount("/public", FileServer::from("static/"))
         .mount("/", routes![get_data])
         .mount("/auto/", routes![auto_get_data])
         .mount("/status/", routes![status])

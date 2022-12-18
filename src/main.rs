@@ -4,10 +4,6 @@ extern crate rocket;
 use chrono::Datelike;
 use rocket::fs::NamedFile;
 use rocket::tokio::io::AsyncWriteExt;
-// Static files
-use rocket::fs::FileServer;
-use rocket::response::Redirect;
-
 use log::{error, info, warn};
 
 #[get("/?<day>&<month>")]
@@ -235,7 +231,6 @@ async fn launch() -> _ {
     // Start the server
     rocket::build()
         // Static files
-        .mount("/public", FileServer::from("./static/"))
         .mount("/", routes![get_data])
         .mount("/auto/", routes![auto_get_data])
         .mount("/status/", routes![status])

@@ -1,6 +1,8 @@
 #[macro_use]
 extern crate rocket;
 
+use std::path::{Path, PathBuf};
+
 use chrono::Datelike;
 use log::{error, info, warn};
 use rocket::fs::NamedFile;
@@ -57,8 +59,8 @@ async fn get_data(day: u8, month: u8) -> Result<NamedFile, serde_json::Value> {
             Err(err) => {
                 error!("Error while getting data: {}", err);
                 return Err(json!({
-                    "error": format!("Szkoła jest offline! Spróbuj ponownie później.")
-                }))
+                    "error": "Szkoła jest offline! Spróbuj ponownie później."
+                }));
             }
         };
 
@@ -112,7 +114,11 @@ async fn get_data(day: u8, month: u8) -> Result<NamedFile, serde_json::Value> {
         let response_status = response.status().as_u16();
         error!("Server returned a {} status code", response_status);
         Err(json!({
-            "error": format!("Serwer zwrócił nieznany status {}! Spróbuj ponownie później", response_status)
+            "error":
+                format!(
+                    "Serwer zwrócił nieznany status {}! Spróbuj ponownie później",
+                    response_status
+                )
         }))
     }
 }
@@ -193,7 +199,7 @@ async fn auto_get_data(when: String) -> Result<NamedFile, serde_json::Value> {
                 error!("Error while getting data: {}", err);
                 return Err(json!({
                     "error": "Szkoła jest offline! Spróbuj ponownie później."
-                }))
+                }));
             }
         };
 
@@ -245,15 +251,29 @@ async fn auto_get_data(when: String) -> Result<NamedFile, serde_json::Value> {
     } else if response.status() == 404 {
         // If the server returns a 404 status code
         warn!("No data for {}", date);
-        Err(json!({"error": format!("Nie ma obecnie zastępstw na dzień {}", date)}))
+        Err(json!({
+            "error": format!("Nie ma obecnie zastępstw na dzień {}", date)
+        }))
     } else {
         // Return an error
         let response_status = response.status().as_u16();
         error!("Server returned a {} status code", response_status);
         Err(json!({
-            "error": format!("Serwer zwrócił nieznany status {}! Spróbuj ponownie później", response_status)
+            "error":
+                format!(
+                    "Serwer zwrócił nieznany status {}! Spróbuj ponownie później",
+                    response_status
+                )
         }))
     }
+}
+
+// File serving (for example, localhost:9000/files/10.10.2022.pdf)
+#[get("/<file>")]
+async fn files(file: &str) -> NamedFile {
+    NamedFile::open(format!("./cached/{}", file))
+        .await
+        .expect("Error while opening file")
 }
 
 // Status page
@@ -285,5 +305,6 @@ async fn launch() -> _ {
         .mount("/", routes![get_data])
         .mount("/auto/", routes![auto_get_data])
         .mount("/status/", routes![status])
+        .mount("/files/", routes![files])
         .register("/", catchers![not_found])
 }

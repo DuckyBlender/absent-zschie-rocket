@@ -2,16 +2,19 @@
 extern crate rocket;
 
 use chrono::Datelike;
+use log::{error, info, warn};
 use rocket::fs::NamedFile;
 use rocket::tokio::io::AsyncWriteExt;
-use log::{error, info, warn};
+use serde_json::json;
 
 #[get("/?<day>&<month>")]
-async fn get_data(day: u8, month: u8) -> Result<NamedFile, String> {
+async fn get_data(day: u8, month: u8) -> Result<NamedFile, serde_json::Value> {
     info!("Incoming request for {}.{}", day, month);
     if day > 31 || month > 12 {
         warn!("Invalid date: {}/{}", day, month);
-        return Err("Invalid date".to_string());
+        return Err(json!({
+            "error": "Invalid date"
+        }));
     }
     // Make the day have 2 digits
     let day = format!("{:02}", day);
@@ -51,7 +54,12 @@ async fn get_data(day: u8, month: u8) -> Result<NamedFile, String> {
     let response =
         match reqwest::get(format!("https://zastepstwa.zschie.pl/pliki/{}.pdf", date)).await {
             Ok(response) => response,
-            Err(err) => return Err(format!("Error while fetching data: {}", err)),
+            Err(err) => {
+                error!("Error while getting data: {}", err);
+                return Err(json!({
+                    "error": format!("Szkoła jest offline! Spróbuj ponownie później.")
+                }))
+            }
         };
 
     // If the server returns a 200 status code
@@ -61,17 +69,32 @@ async fn get_data(day: u8, month: u8) -> Result<NamedFile, String> {
 
         let mut file = match rocket::tokio::fs::File::create(&filename_pdf).await {
             Ok(file) => file,
-            Err(err) => return Err(format!("Error while creating file: {}", err)),
+            Err(err) => {
+                error!("Error #1 while creating file: {}", err);
+                return Err(json!({
+                    "error": "Error #1, zgłoś ten problem do twórcy!"
+                }));
+            }
         };
         // Download the PDF
         let filebytes = match response.bytes().await {
             Ok(filebytes) => filebytes,
-            Err(err) => return Err(format!("Error while converting file: {}", err)),
+            Err(err) => {
+                error!("Error #2 while downloading file: {}", err);
+                return Err(json!({
+                    "error": "Error #2, zgłoś ten problem do twórcy!"
+                }));
+            }
         };
         // Write the PDF to the file
         match file.write_all(&filebytes).await {
             Ok(file) => file,
-            Err(err) => return Err(format!("Error while writing file: {}", err)),
+            Err(err) => {
+                error!("Error #3 while writing file: {}", err);
+                return Err(json!({
+                    "error": "Error #3, zgłoś ten problem do twórcy!"
+                }));
+            }
         };
 
         // Return the PDF
@@ -81,42 +104,46 @@ async fn get_data(day: u8, month: u8) -> Result<NamedFile, String> {
     } else if response.status() == 404 {
         warn!("No data for {}", date);
         // If the server returns a 404 status code
-        Err(format!(
-            "Nie ma obecnie zastępstw na dzień {}! Spróbuj ponownie później!",
-            date
-        ))
+        Err(json!({
+            "error": format!("Nie ma obecnie zastępstw na dzień {}", date)
+        }))
     } else {
         // Return an error
         let response_status = response.status().as_u16();
         error!("Server returned a {} status code", response_status);
-        Err(format!("Server returned a {} status code", response_status))
+        Err(json!({
+            "error": format!("Serwer zwrócił nieznany status {}! Spróbuj ponownie później", response_status)
+        }))
     }
 }
 
 #[get("/?<when>")]
-async fn auto_get_data(when: String) -> Result<NamedFile, String> {
+async fn auto_get_data(when: String) -> Result<NamedFile, serde_json::Value> {
     // Get current date
     let current_date = if when == "tomorrow" {
         // If it's friday or saturday return message
         match chrono::Local::now().weekday() {
-            chrono::Weekday::Fri => return Err("Jest jutro sobota, nie ma zastępstw!".to_string()),
+            chrono::Weekday::Fri => {
+                return Err(json!({"error": "Jest jutro sobota, więc nie ma zastępstw!"}))
+            }
             chrono::Weekday::Sat => {
-                return Err("Jest jutro niedziela, nie ma zastępstw!".to_string())
+                return Err(json!({"error": "Jest jutro niedziela, więc nie ma zastępstw!"}))
             }
             _ => chrono::Local::now() + chrono::Duration::days(1),
         }
     } else if when == "today" {
         match chrono::Local::now().weekday() {
             chrono::Weekday::Sat => {
-                return Err("Jest dziś sobota, nie ma dziś żadnych lekcji!".to_string())
+                return Err(json!({"error": "Jest dziś sobota, nie ma dziś żadnych lekcji!"}))
             }
             chrono::Weekday::Sun => {
-                return Err("Jest dziś niedziela, nie ma dziś żadnych lekcji!".to_string())
+                return Err(json!({"error": "Jest dziś niedziela, nie ma dziś żadnych lekcji!"}))
             }
             _ => chrono::Local::now(),
         }
     } else {
-        return Err("Invalid type in request".to_string());
+        error!("Invalid parameter for when: {}", when);
+        return Err(json!({"error": "Niepoprawny parametr!"}));
     };
     info!(
         "Incoming request for {} ({}.{})",
@@ -162,7 +189,12 @@ async fn auto_get_data(when: String) -> Result<NamedFile, String> {
     let response =
         match reqwest::get(format!("https://zastepstwa.zschie.pl/pliki/{}.pdf", date)).await {
             Ok(response) => response,
-            Err(err) => return Err(format!("Error while fetching data: {}", err)),
+            Err(err) => {
+                error!("Error while getting data: {}", err);
+                return Err(json!({
+                    "error": "Szkoła jest offline! Spróbuj ponownie później."
+                }))
+            }
         };
 
     // If the server returns a 200 status code
@@ -172,36 +204,55 @@ async fn auto_get_data(when: String) -> Result<NamedFile, String> {
 
         let mut file = match rocket::tokio::fs::File::create(&filename_pdf).await {
             Ok(file) => file,
-            Err(err) => return Err(format!("Error while creating file: {}", err)),
+            Err(err) => {
+                error!("Error #1 while creating file: {}", err);
+                return Err(json!({
+                    "error": "Error #1, zgłoś ten problem do twórcy!"
+                }));
+            }
         };
         // Download the PDF
         let filebytes = match response.bytes().await {
             Ok(filebytes) => filebytes,
-            Err(err) => return Err(format!("Error while converting file: {}", err)),
+            Err(err) => {
+                error!("Error while downloading file: {}", err);
+                return Err(json!({
+                    "error": "Error #2, zgłoś ten problem do twórcy!"
+                }));
+            }
         };
         // Write the PDF to the file
         match file.write_all(&filebytes).await {
             Ok(file) => file,
-            Err(err) => return Err(format!("Error while writing file: {}", err)),
+            Err(err) => {
+                error!("Error while writing file: {}", err);
+                return Err(json!({
+                    "error": "Error #3, zgłoś ten problem do twórcy!"
+                }));
+            }
         };
 
         // Return the file
         match NamedFile::open(&filename_pdf).await {
             Ok(file) => Ok(file),
-            Err(err) => Err(format!("Error while opening file: {}", err)),
+            Err(err) => {
+                error!("Error while opening file: {}", err);
+                Err(json!({
+                    "error": "Error #4, zgłoś ten problem do twórcy!"
+                }))
+            }
         }
     } else if response.status() == 404 {
         // If the server returns a 404 status code
         warn!("No data for {}", date);
-        Err(format!(
-            "Nie ma obecnie zastępstw na dzień {}! Spróbuj ponownie później!",
-            date
-        ))
+        Err(json!({"error": format!("Nie ma obecnie zastępstw na dzień {}", date)}))
     } else {
         // Return an error
         let response_status = response.status().as_u16();
         error!("Server returned a {} status code", response_status);
-        Err(format!("Server returned a {} status code", response_status))
+        Err(json!({
+            "error": format!("Serwer zwrócił nieznany status {}! Spróbuj ponownie później", response_status)
+        }))
     }
 }
 
@@ -214,7 +265,7 @@ async fn status() -> &'static str {
 // 404 handler
 #[catch(404)]
 async fn not_found() -> &'static str {
-    "Nie ma takiej strony! Jeśli to błąd, napisz do twórcy."
+    "Nie ma takiej strony! Jeśli uważasz że to błąd, napisz do twórcy."
 }
 
 #[launch]

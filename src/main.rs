@@ -14,15 +14,23 @@ async fn ready_file(day: u32, month: u32, year: i32) -> Value {
     // Check if the date is valid using chrono
     if chrono::NaiveDate::from_ymd_opt(year, month, day).is_none() {
         // If it isn't, return an error
-        error!("Invalid date: {}.{}", day, month);
+        warn!("Invalid date: {}.{}", day, month);
         return json!({"status": "", "error": "Nieprawidłowa data!"});
     }
     // Make the day have 2 digits
     let day = format!("{:02}", day);
-    println!("Day: {}", day);
     // Make the month have 2 digits
     let month = format!("{:02}", month);
-    println!("Month: {}", month);
+
+    // Check if the date is on the weekend
+    let date = chrono::NaiveDate::from_ymd_opt(year, month.parse().unwrap(), day.parse().unwrap());
+    if date.unwrap().weekday() == chrono::Weekday::Sat
+        || date.unwrap().weekday() == chrono::Weekday::Sun
+    {
+        // If it is, return an error
+        warn!("Date on weekend: {}.{}", day, month);
+        return json!({"status": "", "error": "Wybrana data to weekend!"});
+    }
 
     // Setup common variables
     let date = format!("{}.{}.{}", day, month, year);
@@ -113,8 +121,6 @@ async fn ready_file(day: u32, month: u32, year: i32) -> Value {
         }
     }
 }
-
-
 
 #[get("/?<day>&<month>&<year>")]
 async fn get_data(day: u32, month: u32, year: i32) -> Result<Value, Value> {

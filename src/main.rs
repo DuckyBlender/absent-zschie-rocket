@@ -9,7 +9,7 @@ use serde_json::{json, Value};
 
 const CACHE_TIME_MIN: i64 = 10;
 
-async fn ready_file(day: u8, month: u8, year: u32) {
+async fn ready_file(day: u8, month: u8, year: u32) -> Value {
     // Setup common variables
     let date = format!("{}.{}.{}", day, month, year);
     let filename_pdf = format!("./cached/{}.pdf", date);
@@ -26,41 +26,71 @@ async fn ready_file(day: u8, month: u8, year: u32) {
                     .modified()
                     .expect("Error while getting file modified date"),
             );
+
+        // If the file is younger than X minutes, stop the function
         if file_age.num_minutes() < CACHE_TIME_MIN {
-            // If it is, return the file
+            // If it is, stop the function
             info!("Using cached data for {}", date);
+            return json!({
+                "status": "ok",
+                "link": format!("https://ducky.pics/files/{}.pdf", date)
+            });
+        // If it isn't, delete the file and download the new one
         } else {
             // Delete the file
-            info!("Deleting old cached data for {}", date);
+            info!("Deleting old cached data for {}. It is {} minutes old, the max is {}", date, file_age.num_minutes(), CACHE_TIME_MIN);
             rocket::tokio::fs::remove_file(&filename_pdf)
                 .await
                 .expect("Error while deleting file");
-            // Get the new data
-            info!("Getting new data for {}", date);
-            let response =
-            reqwest::get(format!("https://zastepstwa.zschie.pl/pliki/{}.pdf", date)).await.unwrap();
-            // If the server returns a 200 status code
-            if response.status() == 200 {
-                // Create a new file
-                let mut file = rocket::tokio::fs::File::create(&filename_pdf)
-                    .await
-                    .expect("Error while creating file");
-                // Download the PDF
-                let filebytes = response.bytes().await.unwrap();
-                // Write the PDF to the file
-                file.write_all(&filebytes)
-                    .await
-                    .expect("Error while writing file");
-            } else if response.status() == 404 {
-                // If the server returns a 404 status code
-                warn!("Nie ma zastępstw na dzień {}", date);
-                return;
-            } else {
-                // Return an error
-                let response_status = response.status().as_u16();
-                error!("Server returned a {} status code", response_status);
-                return;
-            }
+            // And continue the function
+        }
+    }
+
+    // Get the new data
+    info!("Getting new data for {}", date);
+    let response = reqwest::get(format!("https://zastepstwa.zschie.pl/pliki/{}.pdf", date))
+        .await
+        .unwrap();
+    // If the server returns a 200 status code
+    match response.status().as_u16() {
+        200 => {
+            // Create a new file
+            let mut file = rocket::tokio::fs::File::create(&filename_pdf)
+                .await
+                .expect("Error while creating file");
+            // Download the PDF
+            let filebytes = response.bytes().await.unwrap();
+            // Write the PDF to the file
+            file.write_all(&filebytes)
+                .await
+                .expect("Error while writing file");
+            // Close the file
+            file.flush()
+                .await
+                .expect("Error while flushing file");
+            // Return the link to the file
+            info!("Saved new data for {}", date);
+            return json!({
+                "status": "ok",
+                "link": format!("https://ducky.pics/files/{}.pdf", date)
+            });
+        }
+        404 => {
+            // If the server returns a 404 status code
+            warn!("Nie ma zastępstw na dzień {}", date);
+            return json!({
+                "status": "not_found",
+                "error": format!("Nie ma zastępstw na dzień {}. Spróbuj ponownie później!", date)
+            });
+        }
+        _ => {
+            // Return an error if the server returns a different status code
+            let response_status = response.status().as_u16();
+            error!("Server returned a {} status code", response_status);
+            return json!({
+                "status": "error",
+                "error": format!("Server zwrócił nieznany status {}. Spróbuj ponownie później!", response_status)
+            });
         }
     }
 }
@@ -79,7 +109,10 @@ async fn get_data(day: u8, month: u8) -> Result<Value, Value> {
     let current_year: u32 = chrono::Local::now().year().try_into().unwrap();
 
     ready_file(day, month, current_year).await;
-    let link = format!("https://ducky.pics/files/{}.{}.{}.pdf", day, month, current_year);
+    let link = format!(
+        "https://ducky.pics/files/{}.{}.{}.pdf",
+        day, month, current_year
+    );
     Ok(json!({
         "status": "ok",
         "link": link
@@ -128,7 +161,10 @@ async fn auto_get_data(when: String) -> Result<Value, Value> {
 
     ready_file(day, month, current_year).await;
 
-    let link = format!("https://ducky.pics/files/{}.{}.{}.pdf", day, month, current_year);
+    let link = format!(
+        "https://ducky.pics/files/{}.{}.{}.pdf",
+        day, month, current_year
+    );
 
     Ok(json!({
         "status": "ok",

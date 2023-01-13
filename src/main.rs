@@ -8,7 +8,7 @@ use rocket::tokio::io::AsyncWriteExt;
 use serde_json::{json, Value};
 
 const CACHE_TIME_MIN: i64 = 30;
-const DOMAIN: &str = "https://ducky.pics/";
+const DOMAIN: &str = "http://192.168.1.253:9000";
 
 async fn ready_file(day: u32, month: u32, year: i32) -> Value {
     // Check if the date is valid using chrono
@@ -18,12 +18,15 @@ async fn ready_file(day: u32, month: u32, year: i32) -> Value {
         return json!({"status": "", "error": "Nieprawidłowa data!"});
     }
     // Make the day have 2 digits
-    let day: u8 = format!("{:02}", day).parse().unwrap();
+    let day = format!("{:02}", day);
+    println!("Day: {}", day);
     // Make the month have 2 digits
-    let month: u8 = format!("{:02}", month).parse().unwrap();
+    let month = format!("{:02}", month);
+    println!("Month: {}", month);
 
     // Setup common variables
     let date = format!("{}.{}.{}", day, month, year);
+    println!("Date: {}", date);
     let filename_pdf = format!("./cached/{}.pdf", date);
 
     // Check if the file already exists in the cache
@@ -65,6 +68,7 @@ async fn ready_file(day: u32, month: u32, year: i32) -> Value {
 
     // Get the new data
     info!("Getting new data for {}", date);
+    println!("https://zastepstwa.zschie.pl/pliki/{}.pdf", date);
     let response = reqwest::get(format!("https://zastepstwa.zschie.pl/pliki/{}.pdf", date))
         .await
         .unwrap();
@@ -109,6 +113,8 @@ async fn ready_file(day: u32, month: u32, year: i32) -> Value {
         }
     }
 }
+
+
 
 #[get("/?<day>&<month>&<year>")]
 async fn get_data(day: u32, month: u32, year: i32) -> Result<Value, Value> {
@@ -182,7 +188,7 @@ async fn not_found() -> &'static str {
 // 500 handler
 #[catch(500)]
 async fn internal_server_error() -> &'static str {
-    "Wystąpił błąd serwera! Jeśli uważasz że to błąd, napisz do twórcy."
+    "Wystąpił błąd wewnętrzny!"
 }
 
 #[launch]

@@ -6,6 +6,7 @@ use log::{error, info, warn};
 use rocket::fs::NamedFile;
 use rocket::tokio::io::AsyncWriteExt;
 use serde_json::{json, Value};
+use chrono::{DateTime, Weekday};
 
 const CACHE_TIME_MIN: i64 = 30;
 const DOMAIN: &str = "https://zastepstwa.ducky.pics";
@@ -24,8 +25,8 @@ async fn ready_file(day: u32, month: u32, year: i32) -> Value {
 
     // Check if the date is on the weekend
     let date = chrono::NaiveDate::from_ymd_opt(year, month.parse().unwrap(), day.parse().unwrap());
-    if date.unwrap().weekday() == chrono::Weekday::Sat
-        || date.unwrap().weekday() == chrono::Weekday::Sun
+    if date.unwrap().weekday() == Weekday::Sat
+        || date.unwrap().weekday() == Weekday::Sun
     {
         // If it is, return an error
         warn!("Date on weekend: {}.{}", day, month);
@@ -43,7 +44,7 @@ async fn ready_file(day: u32, month: u32, year: i32) -> Value {
             .await
             .expect("Error while getting metadata");
         let file_age = chrono::Local::now()
-            - chrono::DateTime::from(
+            - DateTime::from(
                 metadata
                     .modified()
                     .expect("Error while getting file modified date"),
@@ -75,9 +76,17 @@ async fn ready_file(day: u32, month: u32, year: i32) -> Value {
 
     // Get the new data
     info!("Getting new data for {}", date);
-    let response = reqwest::get(format!("https://zastepstwa.zschie.pl/pliki/{}.pdf", date))
-        .await
-        .unwrap();
+    let response =
+        match reqwest::get(format!("https://zastepstwa.zschie.pl/pliki/{}.pdf", date)).await {
+            Ok(response) => response,
+            Err(_) => {
+                error!("Error while downloading data for {}", date);
+                return json!({
+                    "code": 500,
+                    "error": "Strona szkoły jest offline! Spróbuj ponownie później!"
+                });
+            }
+        };
     // If the server returns a 200 status code
     match response.status().as_u16() {
         200 => {
@@ -133,11 +142,15 @@ async fn auto_get_data(when: String) -> Result<Value, Value> {
     // Get current date
     let (day, month, year): (u32, u32, i32) = match when.as_str() {
         "today" => match chrono::Local::now().weekday() {
-            chrono::Weekday::Sat => {
-                return Err(json!({"code": 422, "error": "Jest dziś sobota, nie ma dziś żadnych lekcji!"}))
+            Weekday::Sat => {
+                return Err(
+                    json!({"code": 422, "error": "Jest dziś sobota, nie ma dziś żadnych lekcji!"}),
+                )
             }
-            chrono::Weekday::Sun => {
-                return Err(json!({"code": 422, "error": "Jest dziś niedziela, nie ma dziś żadnych lekcji!"}))
+            Weekday::Sun => {
+                return Err(
+                    json!({"code": 422, "error": "Jest dziś niedziela, nie ma dziś żadnych lekcji!"}),
+                )
             }
             _ => {
                 let date = chrono::Local::now().naive_local().date();
@@ -145,11 +158,15 @@ async fn auto_get_data(when: String) -> Result<Value, Value> {
             }
         },
         "tomorrow" => match chrono::Local::now().weekday() {
-            chrono::Weekday::Fri => {
-                return Err(json!({"code": 422, "error": "Jest jutro sobota, więc nie ma zastępstw!"}))
+            Weekday::Fri => {
+                return Err(
+                    json!({"code": 422, "error": "Jest jutro sobota, więc nie ma zastępstw!"}),
+                )
             }
-            chrono::Weekday::Sat => {
-                return Err(json!({"code": 422, "error": "Jest jutro niedziela, więc nie ma zastępstw!"}))
+            Weekday::Sat => {
+                return Err(
+                    json!({"code": 422, "error": "Jest jutro niedziela, więc nie ma zastępstw!"}),
+                )
             }
             _ => {
                 let date = chrono::Local::now().naive_local().date() + chrono::Duration::days(1);
@@ -208,10 +225,13 @@ async fn launch() -> _ {
 
     // Start the server
     rocket::build()
-        // Static files
+        // Main routes
         .mount("/", routes![get_data])
         .mount("/auto/", routes![auto_get_data])
+        // Status route
         .mount("/status/", routes![status])
+        // File serving route
         .mount("/files/", routes![files])
+        // Error handlers
         .register("/", catchers![not_found, internal_server_error])
 }

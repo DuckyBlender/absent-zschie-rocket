@@ -15,7 +15,7 @@ async fn ready_file(day: u32, month: u32, year: i32) -> Value {
     if chrono::NaiveDate::from_ymd_opt(year, month, day).is_none() {
         // If it isn't, return an error
         warn!("Invalid date: {}.{}", day, month);
-        return json!({"code": 422, "status": "", "error": "Nieprawidłowa data!"});
+        return json!({"code": 422, "error": "Nieprawidłowa data!"});
     }
     // Make the day have 2 digits
     let day = format!("{:02}", day);
@@ -29,12 +29,11 @@ async fn ready_file(day: u32, month: u32, year: i32) -> Value {
     {
         // If it is, return an error
         warn!("Date on weekend: {}.{}", day, month);
-        return json!({"code": 422, "status": "", "error": "Wybrana data to weekend!"});
+        return json!({"code": 422, "error": "Wybrana data to weekend!"});
     }
 
     // Setup common variables
     let date = format!("{}.{}.{}", day, month, year);
-    println!("Date: {}", date);
     let filename_pdf = format!("./cached/{}.pdf", date);
 
     // Check if the file already exists in the cache
@@ -56,7 +55,6 @@ async fn ready_file(day: u32, month: u32, year: i32) -> Value {
             info!("Using cached data for {}", date);
             return json!({
                 "code": 200,
-                "status": "ok",
                 "link": format!("{}/files/{}.pdf", DOMAIN, date)
             });
         // If it isn't, delete the file and download the new one
@@ -77,7 +75,6 @@ async fn ready_file(day: u32, month: u32, year: i32) -> Value {
 
     // Get the new data
     info!("Getting new data for {}", date);
-    println!("https://zastepstwa.zschie.pl/pliki/{}.pdf", date);
     let response = reqwest::get(format!("https://zastepstwa.zschie.pl/pliki/{}.pdf", date))
         .await
         .unwrap();
@@ -100,7 +97,6 @@ async fn ready_file(day: u32, month: u32, year: i32) -> Value {
             info!("Saved new data for {}", date);
             json!({
                 "code": 200,
-                "status": "ok",
                 "link": format!("{}/files/{}.pdf", DOMAIN, date)
             })
         }
@@ -109,7 +105,6 @@ async fn ready_file(day: u32, month: u32, year: i32) -> Value {
             warn!("Nie ma zastępstw na dzień {}", date);
             json!({
                 "code": 404,
-                "status": "",
                 "error": format!("Nie ma zastępstw na dzień {}. Spróbuj ponownie później!", date)
             })
         }
@@ -119,7 +114,6 @@ async fn ready_file(day: u32, month: u32, year: i32) -> Value {
             error!("Server returned a {} status code", response_status);
             json!({
                 "code": 500,
-                "status": "",
                 "error": format!("Server zwrócił nieznany status {}. Spróbuj ponownie później!", response_status)
             })
         }
@@ -166,7 +160,6 @@ async fn auto_get_data(when: String) -> Result<Value, Value> {
             error!("Invalid parameter for when: {}", when);
             return Err(json!({
                 "code": 422,
-                "status": "",
                 "error": "Nieprawidłowa data!"}));
         }
     };

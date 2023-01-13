@@ -4,6 +4,6 @@ Pomysł oraz początkowy algorytm od [@6vz](https://github.com/6vz) ([Zastępstw
 
 ---
 
-###  Aktualny skrót do iOS:
+### Skrót do iOS:
 https://www.icloud.com/shortcuts/72f7e1d2391b4ba5830be806418a04e7
 (ostatna aktualizacja 14.01.2023)

@@ -7,9 +7,21 @@ use rocket::fs::NamedFile;
 use rocket::tokio::io::AsyncWriteExt;
 use serde_json::{json, Value};
 
-const CACHE_TIME_MIN: i64 = 10;
+const CACHE_TIME_MIN: i64 = 30;
+const DOMAIN: &str = "https://ducky.pics/";
 
-async fn ready_file(day: u8, month: u8, year: u32) -> Value {
+async fn ready_file(day: u32, month: u32, year: i32) -> Value {
+    // Check if the date is valid using chrono
+    if chrono::NaiveDate::from_ymd_opt(year, month, day).is_none() {
+        // If it isn't, return an error
+        error!("Invalid date: {}.{}", day, month);
+        return json!({"status": "", "error": "Nieprawidłowa data!"});
+    }
+    // Make the day have 2 digits
+    let day: u8 = format!("{:02}", day).parse().unwrap();
+    // Make the month have 2 digits
+    let month: u8 = format!("{:02}", month).parse().unwrap();
+
     // Setup common variables
     let date = format!("{}.{}.{}", day, month, year);
     let filename_pdf = format!("./cached/{}.pdf", date);
@@ -33,12 +45,17 @@ async fn ready_file(day: u8, month: u8, year: u32) -> Value {
             info!("Using cached data for {}", date);
             return json!({
                 "status": "ok",
-                "link": format!("https://ducky.pics/files/{}.pdf", date)
+                "link": format!("{}/files/{}.pdf", DOMAIN, date)
             });
         // If it isn't, delete the file and download the new one
         } else {
             // Delete the file
-            info!("Deleting old cached data for {}. It is {} minutes old, the max is {}", date, file_age.num_minutes(), CACHE_TIME_MIN);
+            info!(
+                "Deleting old cached data for {}. It is {} minutes old, the max is {}",
+                date,
+                file_age.num_minutes(),
+                CACHE_TIME_MIN
+            );
             rocket::tokio::fs::remove_file(&filename_pdf)
                 .await
                 .expect("Error while deleting file");
@@ -65,111 +82,81 @@ async fn ready_file(day: u8, month: u8, year: u32) -> Value {
                 .await
                 .expect("Error while writing file");
             // Close the file
-            file.flush()
-                .await
-                .expect("Error while flushing file");
+            file.flush().await.expect("Error while flushing file");
             // Return the link to the file
             info!("Saved new data for {}", date);
-            return json!({
+            json!({
                 "status": "ok",
-                "link": format!("https://ducky.pics/files/{}.pdf", date)
-            });
+                "link": format!("{}/files/{}.pdf", DOMAIN, date)
+            })
         }
         404 => {
             // If the server returns a 404 status code
             warn!("Nie ma zastępstw na dzień {}", date);
-            return json!({
-                "status": "not_found",
+            json!({
+                "status": "",
                 "error": format!("Nie ma zastępstw na dzień {}. Spróbuj ponownie później!", date)
-            });
+            })
         }
         _ => {
             // Return an error if the server returns a different status code
             let response_status = response.status().as_u16();
             error!("Server returned a {} status code", response_status);
-            return json!({
-                "status": "error",
+            json!({
+                "status": "",
                 "error": format!("Server zwrócił nieznany status {}. Spróbuj ponownie później!", response_status)
-            });
+            })
         }
     }
 }
 
-#[get("/?<day>&<month>")]
-async fn get_data(day: u8, month: u8) -> Result<Value, Value> {
+#[get("/?<day>&<month>&<year>")]
+async fn get_data(day: u32, month: u32, year: i32) -> Result<Value, Value> {
     info!("Incoming request for {}.{}", day, month);
-    if day > 31 || month > 12 {
-        warn!("Invalid date: {}/{}", day, month);
-        return Err(json!({
-            "error": "Invalid date"
-        }));
-    }
-    // Make the day have 2 digits
-    let day: u8 = format!("{:02}", day).parse().unwrap();
-    let current_year: u32 = chrono::Local::now().year().try_into().unwrap();
 
-    ready_file(day, month, current_year).await;
-    let link = format!(
-        "https://ducky.pics/files/{}.{}.{}.pdf",
-        day, month, current_year
-    );
-    Ok(json!({
-        "status": "ok",
-        "link": link
-    }))
+    let json = ready_file(day, month, year).await;
+    Ok(json)
 }
 
 #[get("/?<when>")]
 async fn auto_get_data(when: String) -> Result<Value, Value> {
     // Get current date
-    let current_date = if when == "tomorrow" {
-        // If it's friday or saturday return message
-        match chrono::Local::now().weekday() {
-            chrono::Weekday::Fri => {
-                return Err(json!({"error": "Jest jutro sobota, więc nie ma zastępstw!"}))
-            }
-            chrono::Weekday::Sat => {
-                return Err(json!({"error": "Jest jutro niedziela, więc nie ma zastępstw!"}))
-            }
-            _ => chrono::Local::now() + chrono::Duration::days(1),
-        }
-    } else if when == "today" {
-        match chrono::Local::now().weekday() {
+    let (day, month, year): (u32, u32, i32) = match when.as_str() {
+        "today" => match chrono::Local::now().weekday() {
             chrono::Weekday::Sat => {
                 return Err(json!({"error": "Jest dziś sobota, nie ma dziś żadnych lekcji!"}))
             }
             chrono::Weekday::Sun => {
                 return Err(json!({"error": "Jest dziś niedziela, nie ma dziś żadnych lekcji!"}))
             }
-            _ => chrono::Local::now(),
+            _ => {
+                let date = chrono::Local::now().naive_local().date();
+                (date.day(), date.month(), date.year())
+            }
+        },
+        "tomorrow" => match chrono::Local::now().weekday() {
+            chrono::Weekday::Fri => {
+                return Err(json!({"error": "Jest jutro sobota, więc nie ma zastępstw!"}))
+            }
+            chrono::Weekday::Sat => {
+                return Err(json!({"error": "Jest jutro niedziela, więc nie ma zastępstw!"}))
+            }
+            _ => {
+                let date = chrono::Local::now().naive_local().date() + chrono::Duration::days(1);
+                (date.day(), date.month(), date.year())
+            }
+        },
+        _ => {
+            error!("Invalid parameter for when: {}", when);
+            return Err(json!({
+                "status": "",
+                "error": "Nieprawidłowa data!"}));
         }
-    } else {
-        error!("Invalid parameter for when: {}", when);
-        return Err(json!({"error": "Niepoprawny parametr!"}));
     };
-    info!(
-        "Incoming request for {} ({}.{})",
-        when,
-        current_date.day(),
-        current_date.month()
-    );
 
-    // Make the day have 2 digits
-    let day: u8 = format!("{:02}", current_date.day()).parse().unwrap();
-    let month: u8 = format!("{:02}", current_date.month()).parse().unwrap();
-    let current_year: u32 = current_date.year().try_into().unwrap();
+    let json = ready_file(day, month, year).await;
 
-    ready_file(day, month, current_year).await;
-
-    let link = format!(
-        "https://ducky.pics/files/{}.{}.{}.pdf",
-        day, month, current_year
-    );
-
-    Ok(json!({
-        "status": "ok",
-        "link": link
-    }))
+    Ok(json)
 }
 
 // File serving (for example, localhost:9000/files/10.10.2022.pdf)

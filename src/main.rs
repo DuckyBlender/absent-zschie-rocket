@@ -15,7 +15,7 @@ async fn ready_file(day: u32, month: u32, year: i32) -> Value {
     if chrono::NaiveDate::from_ymd_opt(year, month, day).is_none() {
         // If it isn't, return an error
         warn!("Invalid date: {}.{}", day, month);
-        return json!({"status": "", "error": "Nieprawidłowa data!"});
+        return json!({"code": 422, "status": "", "error": "Nieprawidłowa data!"});
     }
     // Make the day have 2 digits
     let day = format!("{:02}", day);
@@ -29,7 +29,7 @@ async fn ready_file(day: u32, month: u32, year: i32) -> Value {
     {
         // If it is, return an error
         warn!("Date on weekend: {}.{}", day, month);
-        return json!({"status": "", "error": "Wybrana data to weekend!"});
+        return json!({"code": 422, "status": "", "error": "Wybrana data to weekend!"});
     }
 
     // Setup common variables
@@ -55,6 +55,7 @@ async fn ready_file(day: u32, month: u32, year: i32) -> Value {
             // If it is, stop the function
             info!("Using cached data for {}", date);
             return json!({
+                "code": 200,
                 "status": "ok",
                 "link": format!("{}/files/{}.pdf", DOMAIN, date)
             });
@@ -98,6 +99,7 @@ async fn ready_file(day: u32, month: u32, year: i32) -> Value {
             // Return the link to the file
             info!("Saved new data for {}", date);
             json!({
+                "code": 200,
                 "status": "ok",
                 "link": format!("{}/files/{}.pdf", DOMAIN, date)
             })
@@ -106,6 +108,7 @@ async fn ready_file(day: u32, month: u32, year: i32) -> Value {
             // If the server returns a 404 status code
             warn!("Nie ma zastępstw na dzień {}", date);
             json!({
+                "code": 404,
                 "status": "",
                 "error": format!("Nie ma zastępstw na dzień {}. Spróbuj ponownie później!", date)
             })
@@ -115,6 +118,7 @@ async fn ready_file(day: u32, month: u32, year: i32) -> Value {
             let response_status = response.status().as_u16();
             error!("Server returned a {} status code", response_status);
             json!({
+                "code": 500,
                 "status": "",
                 "error": format!("Server zwrócił nieznany status {}. Spróbuj ponownie później!", response_status)
             })
@@ -136,10 +140,10 @@ async fn auto_get_data(when: String) -> Result<Value, Value> {
     let (day, month, year): (u32, u32, i32) = match when.as_str() {
         "today" => match chrono::Local::now().weekday() {
             chrono::Weekday::Sat => {
-                return Err(json!({"error": "Jest dziś sobota, nie ma dziś żadnych lekcji!"}))
+                return Err(json!({"code": 422, "error": "Jest dziś sobota, nie ma dziś żadnych lekcji!"}))
             }
             chrono::Weekday::Sun => {
-                return Err(json!({"error": "Jest dziś niedziela, nie ma dziś żadnych lekcji!"}))
+                return Err(json!({"code": 422, "error": "Jest dziś niedziela, nie ma dziś żadnych lekcji!"}))
             }
             _ => {
                 let date = chrono::Local::now().naive_local().date();
@@ -148,10 +152,10 @@ async fn auto_get_data(when: String) -> Result<Value, Value> {
         },
         "tomorrow" => match chrono::Local::now().weekday() {
             chrono::Weekday::Fri => {
-                return Err(json!({"error": "Jest jutro sobota, więc nie ma zastępstw!"}))
+                return Err(json!({"code": 422, "error": "Jest jutro sobota, więc nie ma zastępstw!"}))
             }
             chrono::Weekday::Sat => {
-                return Err(json!({"error": "Jest jutro niedziela, więc nie ma zastępstw!"}))
+                return Err(json!({"code": 422, "error": "Jest jutro niedziela, więc nie ma zastępstw!"}))
             }
             _ => {
                 let date = chrono::Local::now().naive_local().date() + chrono::Duration::days(1);
@@ -161,6 +165,7 @@ async fn auto_get_data(when: String) -> Result<Value, Value> {
         _ => {
             error!("Invalid parameter for when: {}", when);
             return Err(json!({
+                "code": 422,
                 "status": "",
                 "error": "Nieprawidłowa data!"}));
         }

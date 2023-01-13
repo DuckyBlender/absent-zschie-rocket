@@ -8,7 +8,7 @@ use rocket::tokio::io::AsyncWriteExt;
 use serde_json::{json, Value};
 
 const CACHE_TIME_MIN: i64 = 30;
-const DOMAIN: &str = "http://192.168.1.253:9000";
+const DOMAIN: &str = "https://zastepstwa.ducky.pics";
 
 async fn ready_file(day: u32, month: u32, year: i32) -> Value {
     // Check if the date is valid using chrono

@@ -64,17 +64,30 @@ async fn ready_file(day: u32, month: u32, year: i32) -> Value {
 
     // If we got here, it means that the file doesn't exist or it's too old. We need to download the new one.
     info!("Getting new data for {}", date);
-    let response =
-        match reqwest::get(format!("https://zastepstwa.zschie.pl/pliki/{}.pdf", date)).await {
-            Ok(response) => response,
-            Err(_) => {
-                error!("Error while downloading data for {}", date);
+    let response = match reqwest::get(format!("https://zastepstwa.zschie.pl/pliki/{}.pdf", date))
+        .await
+    {
+        Ok(response) => response,
+        Err(_) => {
+            error!("Error while downloading data for {}", date);
+            // If the file exists, return the link to the old file
+            if std::path::Path::new(&filename_pdf).exists() {
+                // If it does, return the link to the file
+                info!(
+                        "Using cached data for {}, because the file existed and cannot get new one, because the server is offline",
+                        date
+                    );
                 return json!({
-                    "code": 500,
-                    "error": "Strona szkoły jest offline! Spróbuj ponownie później!"
+                    "code": 200,
+                    "link": format!("{}/files/{}.pdf", DOMAIN, date)
                 });
             }
-        };
+            return json!({
+                "code": 500,
+                "error": "Strona szkoły jest offline! Spróbuj ponownie później!"
+            });
+        }
+    };
 
     // Match different status codes from the server and act accordingly
     match response.status().as_u16() {
@@ -110,7 +123,7 @@ async fn ready_file(day: u32, month: u32, year: i32) -> Value {
             if std::path::Path::new(&filename_pdf).exists() {
                 // If it does, return the link to the file
                 info!(
-                    "Using cached data for {}, because the file existed and cannot get new one",
+                    "Using cached data for {}, because the file existed and cannot get new one, because there are no substitutions",
                     date
                 );
                 json!({

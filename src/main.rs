@@ -9,9 +9,9 @@ use rocket::tokio::io::AsyncWriteExt;
 use serde_json::{json, Value};
 
 const CACHE_TIME_MIN: i64 = 30;
-const DOMAIN: &str = "https://zastepstwa.ducky.pics";
+// const DOMAIN: &str = "https://zastepstwa.ducky.pics";
 // Uncomment for local testing
-// const DOMAIN: &str = "http://192.168.1.253:5000";
+const DOMAIN: &str = "http://192.168.1.253:5000";
 
 async fn ready_file(day: u32, month: u32, year: i32) -> Value {
     // Check if the date is valid using chrono
@@ -173,7 +173,6 @@ async fn ready_file(day: u32, month: u32, year: i32) -> Value {
 #[get("/?<day>&<month>&<year>")]
 async fn get_data(day: u32, month: u32, year: i32) -> Result<Value, Value> {
     info!("Incoming request for {:02}.{:02}.{}", day, month, year);
-
     let json = ready_file(day, month, year).await;
     Ok(json)
 }
@@ -229,7 +228,7 @@ async fn auto_get_data(when: String) -> Result<Value, Value> {
     Ok(json)
 }
 
-// File serving (for example, localhost:9000/files/10.10.2022.pdf)
+// File serving (for example, localhost:5000/files/10.10.2022.pdf)
 #[get("/<file>")]
 async fn files(file: &str) -> NamedFile {
     NamedFile::open(format!("./cached/{}", file))
@@ -247,9 +246,17 @@ async fn status() -> &'static str {
 #[get("/stats")]
 async fn stats() -> Value {
     // Get the number of files in the cached folder
-    let files = std::fs::read_dir("./cached")
-        .expect("Error while reading cached folder")
-        .count();
+    // First, start blocking the thread, because there are no async counterparts (or at least that i know of)
+    let files = tokio::task::spawn_blocking(|| {
+        // Count the number of files
+        std::fs::read_dir("./cached")
+            .expect("Error while reading cached folder")
+            .count()
+    }) // Wait for the thread to finish
+    .await
+    .expect("Error while counting files");
+
+    // Return the number of files
     json!({ "files": files })
 }
 

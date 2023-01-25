@@ -20,19 +20,19 @@ async fn ready_file(day: u32, month: u32, year: i32) -> Value {
         warn!("Invalid date: {}.{}", day, month);
         return json!({"code": 422, "error": "Nieprawidłowa data!"});
     }
+
+    // Check if the date is on the winter break (16.01 - 29.01) 
+    if month == 1 && (16..=29).contains(&day) {
+        // If it is, return an error
+        warn!("Date on winter break: {}.{}", day, month);
+        return json!({"code": 422, "error": "Wybrana data to przerwa zimowa!"});
+    }
+
     // Make the day have 2 digits
     let day = format!("{:02}", day);
     // Make the month have 2 digits
     let month = format!("{:02}", month);
 
-    // Check if the date is on the winter break (16.01 - 29.01)
-    if (month == "01" && day.parse::<u32>().unwrap() >= 16)
-        || (month == "01" && day.parse::<u32>().unwrap() <= 29)
-    {
-        // If it is, return an error
-        warn!("Date on winter break: {}.{}", day, month);
-        return json!({"code": 422, "error": "Jest przerwa zimowa! Możesz odpoczywać :)"});
-    }
 
     // Check if the date is on the weekend
     let date = chrono::NaiveDate::from_ymd_opt(year, month.parse().unwrap(), day.parse().unwrap());

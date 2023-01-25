@@ -25,7 +25,7 @@ async fn ready_file(day: u32, month: u32, year: i32) -> Value {
     if month == 1 && (16..=29).contains(&day) {
         // If it is, return an error
         warn!("Date on winter break: {}.{}", day, month);
-        return json!({"code": 422, "error": "Wybrana data to przerwa zimowa!"});
+        return json!({"code": 422, "error": "Jest przerwa zimowa! Możesz odpoczywać!"});
     }
 
     // Make the day have 2 digits

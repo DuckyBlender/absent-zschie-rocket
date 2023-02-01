@@ -246,7 +246,7 @@ async fn files(file: &str) -> NamedFile {
 }
 
 // Status page
-#[get("/")]
+#[get("/status")]
 async fn status() -> &'static str {
     "Strona jest online!"
 }
@@ -269,6 +269,33 @@ async fn stats() -> Value {
     json!({ "files": files })
 }
 
+// getpdf route for making this work as fast as possible using one request only. if it fails just return an error pdf located in the pdf/brak.pdf directory. used for the android app
+#[get("/getpdf?<d>&<m>&<y>")]
+async fn getpdf(d: u32, m: u32, y: i32) -> NamedFile { // This strictly returns a PDF file, not JSON
+    let (day, month, year) = (d, m, y);
+    info!("Incoming FAST request for {:02}.{:02}.{}", day, month, year);
+    let res = ready_file(day, month, year).await;
+    // Check if the request was successful
+    if res["code"] == 200 {
+        // If it was, return the file, get it from the cached folder using the date
+        let date = format!("{:02}.{:02}.{}", day, month, year);
+        let file = match NamedFile::open(format!("./cached/{}.pdf", date)).await {
+            Ok(file) => file,
+            Err(_) => {
+                error!("Error while opening file {}" , date);
+                return NamedFile::open("./pdf/brak.pdf")
+                    .await
+                    .expect("Error while opening file");
+            }
+        };
+        file
+    } else {
+        // If it wasn't, return the error pdf
+        let file = NamedFile::open("./pdf/brak.pdf").await.unwrap();
+        file
+    }
+}
+
 // 404 handler
 #[catch(404)]
 async fn not_found() -> &'static str {
@@ -289,10 +316,8 @@ async fn launch() -> _ {
     // Start the server
     rocket::build()
         // Main routes
-        .mount("/", routes![get_data, stats])
+        .mount("/", routes![get_data, stats, getpdf, status])
         .mount("/auto/", routes![auto_get_data])
-        // Status route
-        .mount("/status/", routes![status])
         // File serving route
         .mount("/files/", routes![files])
         // Error handlers

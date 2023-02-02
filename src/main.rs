@@ -291,8 +291,7 @@ async fn getpdf(d: u32, m: u32, y: i32) -> NamedFile { // This strictly returns 
         file
     } else {
         // If it wasn't, return the error pdf
-        let file = NamedFile::open("./pdf/brak.pdf").await.unwrap();
-        file
+        NamedFile::open("./pdf/brak.pdf").await.unwrap()
     }
 }
 

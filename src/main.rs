@@ -14,6 +14,9 @@ const DOMAIN: &str = "https://zastepstwa.ducky.pics";
 // const DOMAIN: &str = "http://192.168.1.253:5000";
 
 async fn ready_file(day: u32, month: u32, year: i32) -> Value {
+    // CURRENTLY THE API DOES NOT WORK, INFORM THE USER ABOUT IT
+    return json!({"code": 500, "error": "Skrót jest tymczasowo niedostępny przez zmiany w systemie szkoły. Próbujemy znaleźć rozwiązanie problemu. Nie będzie wymagać aktualizacji skrótu."});
+
     // Check if the date is valid using chrono
     if chrono::NaiveDate::from_ymd_opt(year, month, day).is_none() {
         // If it isn't, return an error
@@ -190,6 +193,9 @@ async fn get_data(day: u32, month: u32, year: i32) -> Result<Value, Value> {
 // /auto/?when=tomorrow
 #[get("/?<when>")]
 async fn auto_get_data(when: String) -> Result<Value, Value> {
+    info!("Incoming request for {}", when);
+    // CURRENTLY THE API DOES NOT WORK, INFORM THE USER ABOUT IT
+    return Ok(json!({"code": 500, "error": "Skrót jest tymczasowo niedostępny przez zmiany w systemie szkoły. Próbujemy znaleźć rozwiązanie problemu. Nie będzie wymagać aktualizacji skrótu."}));
     // Get current date
     let (day, month, year): (u32, u32, i32) = match when.as_str() {
         "today" => match chrono::Local::now().weekday() {

@@ -1,21 +1,40 @@
-#[macro_use]
-extern crate rocket;
-
+use actix_files::NamedFile;
+use actix_web::web;
+use actix_web::{get, middleware::Logger, App, HttpServer};
+use actix_web::{HttpResponse, Responder};
 use chrono::Datelike;
 use chrono::{DateTime, Weekday};
 use log::{error, info, warn};
-use rocket::fs::NamedFile;
-use rocket::tokio::io::AsyncWriteExt;
+use reqwest::StatusCode;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use tokio::io::AsyncWriteExt;
 
 const CACHE_TIME_MIN: i64 = 30;
 const DOMAIN: &str = "https://zastepstwa.ducky.pics";
 // Uncomment for local testing
 // const DOMAIN: &str = "http://192.168.1.253:5000";
+// const DOMAIN: &str = "http://172.20.10.3:5000";
+const MAINTENENCE: bool = true;
+// JSON Response Struct
+#[derive(Serialize)]
+struct Response {
+    code: u16,
+    link: String,
+}
+
+// Date Struct
+#[derive(Serialize, Deserialize)]
+struct Date {
+    day: u32,
+    month: u32,
+    year: i32,
+}
 
 async fn ready_file(day: u32, month: u32, year: i32) -> Value {
-    // CURRENTLY THE API DOES NOT WORK, INFORM THE USER ABOUT IT
-    return json!({"code": 500, "error": "Skrót jest tymczasowo niedostępny przez zmiany w systemie szkoły. Próbujemy znaleźć rozwiązanie problemu. Nie będzie wymagać aktualizacji skrótu."});
+    if MAINTENENCE {
+        return json!({"code": 500, "error": "Skrót jest tymczasowo niedostępny przez zmiany w systemie szkoły. Próbujemy znaleźć rozwiązanie problemu. Nie będzie wymagać aktualizacji skrótu."});
+    }
 
     // Check if the date is valid using chrono
     if chrono::NaiveDate::from_ymd_opt(year, month, day).is_none() {
@@ -24,7 +43,7 @@ async fn ready_file(day: u32, month: u32, year: i32) -> Value {
         return json!({"code": 422, "error": "Nieprawidłowa data!"});
     }
 
-    // Check if the date is on the winter break (16.01 - 29.01) 
+    // Check if the date is on the winter break (16.01 - 29.01)
     if month == 1 && (16..=29).contains(&day) {
         // If it is, return an error
         warn!("Date on winter break: {}.{}", day, month);
@@ -35,7 +54,6 @@ async fn ready_file(day: u32, month: u32, year: i32) -> Value {
     let day = format!("{:02}", day);
     // Make the month have 2 digits
     let month = format!("{:02}", month);
-
 
     // Check if the date is on the weekend
     let date = chrono::NaiveDate::from_ymd_opt(year, month.parse().unwrap(), day.parse().unwrap());
@@ -53,7 +71,7 @@ async fn ready_file(day: u32, month: u32, year: i32) -> Value {
     if std::path::Path::new(&filename_pdf).exists() {
         // Check if the file is younger then X minutes. If it is, return the link to the file. If it isn't, try to download the new one.
         // If it fails, return the link to the old file. If it succeeds, return the link to the new file and delete the old one.
-        let metadata = rocket::tokio::fs::metadata(&filename_pdf)
+        let metadata = tokio::fs::metadata(&filename_pdf)
             .await
             .expect("Error while getting metadata");
         let file_age = chrono::Local::now()
@@ -107,11 +125,11 @@ async fn ready_file(day: u32, month: u32, year: i32) -> Value {
             // Create the file, but first we need to make sure that the file doesn't exist
             if std::path::Path::new(&filename_pdf).exists() {
                 // If it does, delete it
-                rocket::tokio::fs::remove_file(&filename_pdf)
+                tokio::fs::remove_file(&filename_pdf)
                     .await
                     .expect("Error while deleting file");
             }
-            let mut file = rocket::tokio::fs::File::create(&filename_pdf)
+            let mut file = tokio::fs::File::create(&filename_pdf)
                 .await
                 .expect("Error while creating file");
             // Download the PDF
@@ -182,32 +200,54 @@ async fn ready_file(day: u32, month: u32, year: i32) -> Value {
 }
 
 // /?day=1&month=1&year=2021
-#[get("/?<day>&<month>&<year>")]
-async fn get_data(day: u32, month: u32, year: i32) -> Result<Value, Value> {
+#[get("/")]
+async fn get_data(date: web::Query<Date>) -> impl Responder {
+    let (day, month, year) = (date.day, date.month, date.year);
     info!("Incoming request for {:02}.{:02}.{}", day, month, year);
     let json = ready_file(day, month, year).await;
-    Ok(json)
+    HttpResponse::Ok()
+        .content_type("application/json")
+        .body(json.to_string())
+}
+
+#[derive(Deserialize)]
+struct When {
+    when: String,
 }
 
 // /auto/?when=today
 // /auto/?when=tomorrow
-#[get("/?<when>")]
-async fn auto_get_data(when: String) -> Result<Value, Value> {
+#[get("/auto/")]
+async fn auto_get_data(when: web::Query<When>) -> impl Responder {
+    let when = when.when.to_lowercase();
+    if when != "today" && when != "tomorrow" {
+        let json = json!({"code": 422, "error": "Nieprawidłowa wartość parametru 'when'"});
+        return HttpResponse::build(StatusCode::UNPROCESSABLE_ENTITY)
+            .content_type("application/json")
+            .body(json.to_string());
+    }
     info!("Incoming request for {}", when);
-    // CURRENTLY THE API DOES NOT WORK, INFORM THE USER ABOUT IT
-    return Ok(json!({"code": 500, "error": "Skrót jest tymczasowo niedostępny przez zmiany w systemie szkoły. Próbujemy znaleźć rozwiązanie problemu. Nie będzie wymagać aktualizacji skrótu."}));
+    if MAINTENENCE {
+        let json = json!({"code": 500, "error": "Skrót jest tymczasowo niedostępny. Próbujemy znaleźć rozwiązanie problemu."});
+        return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
+            .content_type("application/json")
+            .body(json.to_string());
+    }
     // Get current date
     let (day, month, year): (u32, u32, i32) = match when.as_str() {
         "today" => match chrono::Local::now().weekday() {
             Weekday::Sat => {
-                return Err(
-                    json!({"code": 422, "error": "Jest dziś sobota, nie ma dziś żadnych lekcji!"}),
-                )
+                let json =
+                    json!({"code": 422, "error": "Jest dziś sobota, nie ma dziś żadnych lekcji!"});
+                return HttpResponse::build(StatusCode::UNPROCESSABLE_ENTITY)
+                    .content_type("application/json")
+                    .body(json.to_string());
             }
             Weekday::Sun => {
-                return Err(
-                    json!({"code": 422, "error": "Jest dziś niedziela, nie ma dziś żadnych lekcji!"}),
-                )
+                let json = json!({"code": 422, "error": "Jest dziś niedziela, nie ma dziś żadnych lekcji!"});
+                return HttpResponse::build(StatusCode::UNPROCESSABLE_ENTITY)
+                    .content_type("application/json")
+                    .body(json.to_string());
             }
             _ => {
                 let date = chrono::Local::now().naive_local().date();
@@ -216,14 +256,18 @@ async fn auto_get_data(when: String) -> Result<Value, Value> {
         },
         "tomorrow" => match chrono::Local::now().weekday() {
             Weekday::Fri => {
-                return Err(
-                    json!({"code": 422, "error": "Jest jutro sobota, więc nie ma zastępstw!"}),
-                )
+                let json =
+                    json!({"code": 422, "error": "Jutro jest sobota, więc nie ma zastępstw!"});
+                return HttpResponse::build(StatusCode::UNPROCESSABLE_ENTITY)
+                    .content_type("application/json")
+                    .body(json.to_string());
             }
             Weekday::Sat => {
-                return Err(
-                    json!({"code": 422, "error": "Jest jutro niedziela, więc nie ma zastępstw!"}),
-                )
+                let json =
+                    json!({"code": 422, "error": "Jutro jest niedziela, więc nie ma zastępstw!"});
+                return HttpResponse::build(StatusCode::UNPROCESSABLE_ENTITY)
+                    .content_type("application/json")
+                    .body(json.to_string());
             }
             _ => {
                 let date = chrono::Local::now().naive_local().date() + chrono::Duration::days(1);
@@ -232,64 +276,71 @@ async fn auto_get_data(when: String) -> Result<Value, Value> {
         },
         _ => {
             warn!("Invalid parameter for when: {}", when);
-            return Err(json!({
-                "code": 422,
-                "error": "Nieprawidłowa data!"}));
+            let json = json!({"code": 422, "error": "Nieprawidłowa wartość parametru 'when'"});
+            return HttpResponse::build(StatusCode::UNPROCESSABLE_ENTITY)
+                .content_type("application/json")
+                .body(json.to_string());
         }
     };
 
     let json = ready_file(day, month, year).await;
 
-    Ok(json)
+    HttpResponse::Ok()
+        .content_type("application/json")
+        .body(json.to_string())
 }
 
 // File serving (for example, localhost:5000/files/10.10.2022.pdf)
-#[get("/<file>")]
-async fn files(file: &str) -> NamedFile {
-    NamedFile::open(format!("./cached/{}", file))
+#[get("/files/{day}.{month}.{year}.pdf")]
+async fn files(file: web::Path<Date>) -> NamedFile {
+    let file = file.into_inner();
+    let file = format!("{}.{}.{}.pdf", file.day, file.month, file.year);
+    // Check if the file exists
+    if !std::path::Path::new(&format!("./cached/{}", file)).exists() {
+        // If it doesn't, return an error
+        warn!("File {} does not exist", file);
+        return NamedFile::open_async("./pdf/brak.pdf")
+            .await
+            .expect("Error while opening file");
+    }
+
+    NamedFile::open_async(format!("./cached/{}", file))
         .await
         .expect("Error while opening file")
 }
 
 // Status page
 #[get("/status")]
-async fn status() -> &'static str {
-    "Strona jest online!"
+async fn status() -> impl Responder {
+    HttpResponse::Ok().body("OK")
 }
 
 // Statistics page
 #[get("/stats")]
-async fn stats() -> Value {
+async fn stats() -> impl Responder {
     // Get the number of files in the cached folder
-    // First, start blocking the thread, because there are no async counterparts (or at least that i know of)
-    let files = tokio::task::spawn_blocking(|| {
-        // Count the number of files
-        std::fs::read_dir("./cached")
-            .expect("Error while reading cached folder")
-            .count()
-    }) // Wait for the thread to finish
-    .await
-    .expect("Error while counting files");
-
+    let filecount = std::fs::read_dir("./cached").unwrap().count();
     // Return the number of files
-    json!({ "files": files })
+    let json = json!({ "files": filecount });
+    HttpResponse::Ok().json(json)
 }
 
 // getpdf route for making this work as fast as possible using one request only. if it fails just return an error pdf located in the pdf/brak.pdf directory. used for the android app
-#[get("/getpdf?<d>&<m>&<y>")]
-async fn getpdf(d: u32, m: u32, y: i32) -> NamedFile { // This strictly returns a PDF file, not JSON
-    let (day, month, year) = (d, m, y);
+#[get("/getpdf")]
+async fn getpdf(date: web::Query<Date>) -> NamedFile {
+    // This strictly returns a PDF file, not JSON
+    let (day, month, year) = (date.day, date.month, date.year);
     info!("Incoming FAST request for {:02}.{:02}.{}", day, month, year);
     let res = ready_file(day, month, year).await;
     // Check if the request was successful
     if res["code"] == 200 {
         // If it was, return the file, get it from the cached folder using the date
         let date = format!("{:02}.{:02}.{}", day, month, year);
-        let file = match NamedFile::open(format!("./cached/{}.pdf", date)).await {
+        let file = match NamedFile::open_async(format!("./cached/{}.pdf", date)).await {
             Ok(file) => file,
             Err(_) => {
-                error!("Error while opening file {}" , date);
-                return NamedFile::open("./pdf/brak.pdf")
+                error!("Error while opening file {}", date);
+                return NamedFile::open_async("./pdf/brak.pdf")
                     .await
                     .expect("Error while opening file");
             }
@@ -297,34 +348,31 @@ async fn getpdf(d: u32, m: u32, y: i32) -> NamedFile { // This strictly returns 
         file
     } else {
         // If it wasn't, return the error pdf
-        NamedFile::open("./pdf/brak.pdf").await.unwrap()
+        NamedFile::open_async("./pdf/brak.pdf").await.unwrap()
     }
 }
 
-// 404 handler
-#[catch(404)]
-async fn not_found() -> &'static str {
-    "Nie ma takiej strony! Jeśli uważasz że to błąd, napisz do twórcy."
-}
-
-#[launch]
-async fn launch() -> _ {
-    // Check if the cached folder exists
-    if !std::path::Path::new("./cached").exists() {
-        // If it doesn't, create it
-        rocket::tokio::fs::create_dir("./cached")
-            .await
-            .expect("Error while creating cached folder");
-    }
-    // Don't check for the log or config file, because they are in the Github repo
-
-    // Start the server
-    rocket::build()
-        // Main routes
-        .mount("/", routes![get_data, stats, getpdf, status])
-        .mount("/auto/", routes![auto_get_data])
-        // File serving route
-        .mount("/files/", routes![files])
-        // Error handlers
-        .register("/", catchers![not_found])
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
+    // Setup variables
+    std::env::set_var("RUST_LOG", "dev");
+    std::env::set_var("RUST_BACKTRACE", "1");
+    // Set up logging
+    env_logger::init();
+    // Set up the cache folder if it doesn't exist. Asynchronous because why not
+    tokio::fs::create_dir_all("./cached").await.unwrap();
+    // Create the server
+    HttpServer::new(|| {
+        App::new()
+            .wrap(Logger::default())
+            .service(get_data)
+            .service(auto_get_data)
+            .service(files)
+            .service(status)
+            .service(stats)
+            .service(getpdf)
+    })
+    .bind(("0.0.0.0", 5000))?
+    .run()
+    .await
 }

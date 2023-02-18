@@ -355,13 +355,16 @@ async fn getpdf(date: web::Query<Date>) -> NamedFile {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     // Setup variables
-    std::env::set_var("RUST_LOG", "dev");
-    std::env::set_var("RUST_BACKTRACE", "1");
-    // Set up logging
-    env_logger::init();
-    // Set up the cache folder if it doesn't exist. Asynchronous because why not
-    tokio::fs::create_dir_all("./cached").await.unwrap();
-    // Create the server
+    static RUST_LOG: &str = "RUST_LOG"; // This is for good practice, to avoid typos
+    static RUST_BACKTRACE: &str = "RUST_BACKTRACE";
+    std::env::set_var(RUST_LOG, "info"); // Set the log level to info
+    std::env::set_var(RUST_BACKTRACE, "1"); // Enable backtraces
+
+    env_logger::init(); // Set up logging
+
+    tokio::fs::create_dir_all("./cached").await.unwrap(); // Set up the cache folder if it doesn't exist
+
+    // Start the server
     HttpServer::new(|| {
         App::new()
             .wrap(Logger::default())

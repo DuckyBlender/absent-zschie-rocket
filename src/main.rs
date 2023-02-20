@@ -4,7 +4,6 @@ use actix_web::{get, middleware::Logger, App, HttpServer};
 use actix_web::{HttpResponse, Responder};
 use chrono::Datelike;
 use chrono::{DateTime, Weekday};
-use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::io::AsyncWriteExt;

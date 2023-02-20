@@ -195,13 +195,13 @@ async fn auto_get_data(when: web::Query<When>) -> impl Responder {
     let when = when.when.to_lowercase();
     if when != "today" && when != "tomorrow" {
         let json = json!({"code": 422, "error": "Nieprawidłowa wartość parametru 'when'"});
-        return HttpResponse::build(StatusCode::UNPROCESSABLE_ENTITY)
+        return HttpResponse::UnprocessableEntity()
             .content_type("application/json")
             .body(json.to_string());
     }
     if MAINTENENCE {
         let json = json!({"code": 500, "error": MAINTENENCE_MESSAGE});
-        return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
+        return HttpResponse::InternalServerError()
             .content_type("application/json")
             .body(json.to_string());
     }
@@ -211,13 +211,13 @@ async fn auto_get_data(when: web::Query<When>) -> impl Responder {
             Weekday::Sat => {
                 let json =
                     json!({"code": 422, "error": "Jest dziś sobota, nie ma dziś żadnych lekcji!"});
-                return HttpResponse::build(StatusCode::UNPROCESSABLE_ENTITY)
+                return HttpResponse::UnprocessableEntity()
                     .content_type("application/json")
                     .body(json.to_string());
             }
             Weekday::Sun => {
                 let json = json!({"code": 422, "error": "Jest dziś niedziela, nie ma dziś żadnych lekcji!"});
-                return HttpResponse::build(StatusCode::UNPROCESSABLE_ENTITY)
+                return HttpResponse::UnprocessableEntity()
                     .content_type("application/json")
                     .body(json.to_string());
             }
@@ -230,14 +230,14 @@ async fn auto_get_data(when: web::Query<When>) -> impl Responder {
             Weekday::Fri => {
                 let json =
                     json!({"code": 422, "error": "Jutro jest sobota, więc nie ma zastępstw!"});
-                return HttpResponse::build(StatusCode::UNPROCESSABLE_ENTITY)
+                return HttpResponse::UnprocessableEntity()
                     .content_type("application/json")
                     .body(json.to_string());
             }
             Weekday::Sat => {
                 let json =
                     json!({"code": 422, "error": "Jutro jest niedziela, więc nie ma zastępstw!"});
-                return HttpResponse::build(StatusCode::UNPROCESSABLE_ENTITY)
+                return HttpResponse::UnprocessableEntity()
                     .content_type("application/json")
                     .body(json.to_string());
             }
@@ -248,7 +248,7 @@ async fn auto_get_data(when: web::Query<When>) -> impl Responder {
         },
         _ => {
             let json = json!({"code": 422, "error": "Nieprawidłowa wartość parametru 'when'"});
-            return HttpResponse::build(StatusCode::UNPROCESSABLE_ENTITY)
+            return HttpResponse::UnprocessableEntity()
                 .content_type("application/json")
                 .body(json.to_string());
         }

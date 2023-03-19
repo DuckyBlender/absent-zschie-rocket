@@ -14,7 +14,7 @@ const DOMAIN: &str = "https://zastepstwa.ducky.pics";
 // const DOMAIN: &str = "http://192.168.1.253:5000";
 // const DOMAIN: &str = "http://172.20.10.3:5000";
 const MAINTENENCE: bool = true;
-const MAINTENENCE_MESSAGE: &str = "Skrót jest tymczasowo niedostępny przez zmiany w systemie szkoły. Próbujemy znaleźć rozwiązanie problemu. Nie będzie wymagać aktualizacji skrótu.";
+const MAINTENENCE_MESSAGE: &str = "Skrót można usunąć - będzie aplikacja niedługo";
 // JSON Response Struct
 #[derive(Serialize)]
 struct Response {
